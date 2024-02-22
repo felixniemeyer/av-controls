@@ -1,0 +1,4 @@
+#av-control
+
+This provides a sender and a receiver class for tabs to send control signals for audio and visual stuff. 
+
