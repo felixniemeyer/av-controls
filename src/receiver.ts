@@ -1,32 +1,19 @@
-import { v4 as uuidv4 } from 'uuid';
-
-import { ControlSpecification } from './control-specification'
+import { ControlSpec, FaderSpec, PadSpec } from './control-specs'
 import Messages from './messages'
 
 abstract class Control {
-  constructor(
-    public spec: ControlSpecification
-  ){}
-
   abstract handleMessage(payload: any) : void;
+  abstract spec: ControlSpec;
 }
+
 class Fader extends Control {
   public value: number;
   constructor(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    name: string,
-    initValue: number,
+    public spec: FaderSpec,
     public onChange?: (value: number) => void,
   ) {
-    super({
-      x, y, 
-      width, height,
-      name, type: 'fader',
-    });
-    this.value = initValue;
+    super();
+    this.value = spec.initialValue;
   }
 
   handleMessage(payload: any) {
@@ -46,21 +33,30 @@ class Fader extends Control {
   }
 }
 
-class Button extends Control {
+class Pad extends Control {
   public pressed = false;
   constructor(
-    x: number, y: number, size: number, name: string,
-    public onPress?: () => void,
+    public spec: PadSpec,
+    public onPress?: (velocity: number) => void,
     public onRelease?: () => void,
   ) {
-    super({
-      x, y, 
-      width: size, height: size, 
-      name, type: 'button'
-    });
+    super();
   }
 
   handleMessage(payload: any) {
+    if(typeof payload === 'object') {
+      if(payload.press == true) {
+        if(this.pressed == false && this.onPress) {
+          this.onPress(payload.velocity);
+        }
+        this.pressed = true;
+      } else {
+        if(this.pressed == true && this.onRelease) {
+          this.onRelease();
+        }
+        this.pressed = false;
+      }
+    }
   }
 }
 
@@ -70,7 +66,6 @@ class ReceiverBuilder {
 
   constructor(
     private name: string, 
-    private allowedHosts: string[]
   ) { }
 
   addControl(control: Control) {
@@ -79,61 +74,55 @@ class ReceiverBuilder {
   }
 
   build() {
-    // check that all controls have unique names
-    this.controls.forEach((control, i) => {
-      this.controls.forEach((otherControl, j) => {
-        if (i !== j && control.spec.name === otherControl.spec.name) {
-          throw new Error(`Control name ${control.spec.name} is not unique`);
-        }
-      });
-    });
-    return new Receiver(this.controls, this.name, this.allowedHosts);
+    return new Receiver(this.controls, this.name);
   }
 }
 
 class Receiver {
-  private id: string;
-  private origin: string;
-
   constructor(
     private controls: Control[], 
     private name: string,
-    private allowedOrigins: string[]
   ) {
-    // make uuid
-    this.id = uuidv4();
-    this.origin = window.location.origin;
     this.announce();
     this.listen();
+    window.addEventListener('beforeunload', () => {
+      this.sendTabClosing();
+    })
   }
 
   announce() {
-    const specs = this.controls.map((control) => control.spec);
-    this.allowedOrigins.forEach((allowedOrigin) => {
-      window.postMessage(
-        new Messages.AnnounceReceiver(this.origin, this.id, specs, this.name), 
-        allowedOrigin
+    if(window.opener !== null) {
+      console.log('announcing controls');
+      console.log('opener', window.opener);
+      const specs = this.controls.map((control) => control.spec);
+      window.opener.postMessage(
+        new Messages.AnnounceReceiver(this.name, specs), 
+        '*'
       );
-    });
+    }
   }
 
   listen() {
     window.addEventListener('message', (event) => {
-      const origin = event.origin;
-      const data = event.data;
-      if(data.type && this.allowedOrigins.includes(origin)) {
+      if(window.opener !== null) {
+        const data = event.data;
         const type = data.type;
-        if(type === Messages.SearchForReceivers.type){
-          this.announce();
-        } else if(type === Messages.ControlMessage.type) {
+        if(type === Messages.ControlMessage.type) {
           const msg = data as Messages.ControlMessage;
-          if(msg.receiverId === this.id) {
-            const control = this.controls[msg.controlIndex]
-            control.handleMessage(msg.payload);
-          }
+          const control = this.controls[msg.controlIndex]
+          control.handleMessage(msg.payload);
         }
       }
     });
+  }
+
+  sendTabClosing() {
+    if(window.opener !== null) {
+      window.opener.postMessage(
+        new Messages.TabClosing(), 
+        '*'
+      );
+    }
   }
 }
 
@@ -141,6 +130,6 @@ export {
   Receiver, 
   ReceiverBuilder,
   Fader,
-  Button,
+  Pad,
 }
 

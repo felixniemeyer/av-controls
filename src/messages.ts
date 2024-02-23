@@ -1,4 +1,4 @@
-import { ControlSpecification } from './control-specification';
+import { ControlSpec } from './control-specs';
 
 namespace Messages {
   export class AnnounceReceiver {
@@ -7,21 +7,8 @@ namespace Messages {
     type = AnnounceReceiver.type;
 
     constructor(
-      public origin: string,
-      public receiverId: string,
-      public specs: ControlSpecification[], 
       public name: string,
-    ) { }
-
-  }
-
-  export class SearchForReceivers {
-    static type = 'search-for-receivers';
-
-    type = SearchForReceivers.type;
-
-    constructor(
-      public origin: string,
+      public specs: ControlSpec[], 
     ) { }
   }
 
@@ -31,10 +18,15 @@ namespace Messages {
     type = ControlMessage.type;
 
     constructor(
-      public receiverId: string,
       public controlIndex: number,
       public payload: any,
     ) {}
+  }
+
+  export class TabClosing {
+    static type = 'tab-closing';
+
+    type = TabClosing.type;
   }
 }
 
