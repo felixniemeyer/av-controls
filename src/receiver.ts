@@ -19,14 +19,10 @@ class Fader extends Control {
   handleMessage(payload: any) {
     // need to be a value
     if(typeof payload === 'number') {
-      if(payload < 0 || payload > 1) {
-        throw('received slider value outside of range [0,1]');
-      } else {
-        if(this.onChange) {
-          this.onChange(payload);
-        }
-        this.value = payload;
+      if(this.onChange) {
+        this.onChange(payload);
       }
+      this.value = payload;
     } else {
       throw('received slider value that is not a number');
     }
