@@ -1,15 +1,15 @@
-import { ControlSpec, FaderSpec, PadSpec } from './control-specs'
+import * as Specs from './control-specs'
 import Messages from './messages'
 
 abstract class Control {
   abstract handleMessage(payload: any) : void;
-  abstract spec: ControlSpec;
+  abstract spec: Specs.ControlSpec;
 }
 
 class Fader extends Control {
   public value: number;
   constructor(
-    public spec: FaderSpec,
+    public spec: Specs.FaderSpec,
     public onChange?: (value: number) => void,
   ) {
     super();
@@ -32,7 +32,7 @@ class Fader extends Control {
 class Pad extends Control {
   public pressed = false;
   constructor(
-    public spec: PadSpec,
+    public spec: Specs.PadSpec,
     public onPress?: (velocity: number) => void,
     public onRelease?: () => void,
   ) {
@@ -56,6 +56,49 @@ class Pad extends Control {
   }
 }
 
+class Switch extends Control {
+  public on: boolean;
+  constructor(
+    public spec: Specs.SwitchSpec,
+    public onToggle?: (on: boolean) => void,
+  ) {
+    super();
+    this.on = spec.initiallyOn;
+  }
+
+  handleMessage(payload: any): void {
+    if(typeof payload === 'boolean') {
+      if(this.onToggle) {
+        this.onToggle(payload);
+      }
+      this.on = payload;
+    } else {
+      throw('received switch value that is not a boolean');
+    }
+  }
+}
+
+class Selector extends Control {
+  public index: number;
+  constructor(
+    public spec: Specs.SelectorSpec,
+    public onSelect?: (index: number) => void,
+  ) {
+    super();
+    this.index = spec.initialIndex;
+  }
+
+  handleMessage(payload: any): void {
+    if(typeof payload === 'number' && payload % 1 === 0 && payload >= 0) {
+      if(this.onSelect) {
+        this.onSelect(payload);
+      }
+      this.index = payload;
+    } else {
+      throw('received selector value that is not a whole, positive (with 0) number');
+    }
+  }
+}
 
 class ReceiverBuilder {
   private controls: Control[] = [];
@@ -106,6 +149,7 @@ class Receiver {
         if(type === Messages.ControlMessage.type) {
           const msg = data as Messages.ControlMessage;
           const control = this.controls[msg.controlIndex]
+          console.log('received control message', msg);
           control.handleMessage(msg.payload);
         }
       }
@@ -127,5 +171,7 @@ export {
   ReceiverBuilder,
   Fader,
   Pad,
+  Switch,
+  Selector,
 }
 
