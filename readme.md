@@ -1,10 +1,7 @@
 # AV-Controls
+AV-Controls makes it easy to create a web UI in a dedicated tab for sending control signals to your web app. 
 
-Use the ReceiverBuilder to easily specify a touch controller UI that runs in a separate tab. 
-
-# Get started
-
-This provides a sender and a receiver class for tabs to send control signals for audio and visual stuff. 
+Use the ReceiverBuilder from this package to easily specify a touch controller UI that runs in a separate tab. 
 
 ```ts
 // import the controls and meters you'd like to use
@@ -35,3 +32,8 @@ receiverBuilder.addControl(this.bpmFader)
 // this will announce the controls spec to the opener tab
 const receiver = receiverBuilder.build()
 ```
+
+## AV-Controller
+The controller UI will run in a different tab. 
+Open you web app from [AV-Controller](https://github.com/felixniemeyer/av-controller/). 
+
