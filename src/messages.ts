@@ -1,4 +1,7 @@
+import { type Dict } from './dict';
+
 import { ControlSpec } from './control-specs';
+import { MeterSpec } from './meter-specs';
 
 namespace Messages {
   export class AnnounceReceiver {
@@ -8,7 +11,9 @@ namespace Messages {
 
     constructor(
       public name: string,
-      public specs: ControlSpec[], 
+      public controlSpecs: Dict<ControlSpec>, 
+      public meterSpecs: Dict<MeterSpec>,
+      public receiverId: string,
     ) { }
   }
 
@@ -18,8 +23,20 @@ namespace Messages {
     type = ControlMessage.type;
 
     constructor(
-      public controlIndex: number,
+      public controlId: string,
       public payload: any,
+    ) {}
+  }
+
+  export class MeterMessage {
+    static type = 'meter-message';
+
+    type = MeterMessage.type;
+
+    constructor(
+      public meterId: string,
+      public payload: any,
+      public receiverId: string,
     ) {}
   }
 

@@ -1,4 +1,4 @@
-type ControlType = 'fader' | 'pad' | 'switch' | 'selector';
+type ControlType = 'fader' | 'pad' | 'switch' | 'selector' | 'confirm-button' | 'label' | 'confirm-switch';
 
 export class ControlSpec {
   constructor(
@@ -70,5 +70,46 @@ export class SelectorSpec extends ControlSpec {
     public initialIndex: number,
   ) {
     super('selector', name, x, y, width, height, color);
+  }
+}
+
+export class ConfirmButtonSpec extends ControlSpec {
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+  ) {
+    super('confirm-button', name, x, y, width, height, color);
+  }
+}
+
+export class LabelSpec extends ControlSpec {
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public labelPosition: 'top' | 'center' | 'bottom',
+  ) {
+    super('label', name, x, y, width, height, color);
+  }
+}
+
+export class ConfirmSwitchSpec extends ControlSpec {
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public initiallyOn: boolean = false
+  ) {
+    super('confirm-switch', name, x, y, width, height, color);
   }
 }

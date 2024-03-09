@@ -1,9 +1,8 @@
 import Messages from './messages';
-export * as Specs from './control-specs';
+export * from './control-specs';
+export * from './meter-specs';
 export * from './receiver';
-export * from './sender';
 
 export {
   Messages, 
 }
-
