@@ -1,21 +1,67 @@
 import {type Dict} from './dict';
-import * as ControlSpecs from './control-specs'
-import * as MeterSpecs from './meter-specs'
+import {
+  ControlSpec, 
+  GroupSpec,
+  GroupSpecWithoutControls,
+  PadSpec,
+  FaderSpec,
+  SwitchSpec,
+  SelectorSpec,
+  ConfirmButtonSpec,
+  ConfirmSwitchSpec,
+  CakeSpec,
+  ControlSpecsDict,
+} from './control-specs'
 import Messages from './messages'
 
 function randomId() {
   return ((Math.random() + 1) * Math.pow(36, 9)).toString(36).substring(0,10)
 }
 
+type Listener = (payload: any) => void;
+
 abstract class Control {
   abstract handleMessage(payload: any) : void;
-  abstract spec: ControlSpecs.ControlSpec;
+  abstract spec: ControlSpec;
+
+  private listeners: Listener[] = [];
+  addListener(listener: Listener) {
+    this.listeners.push(listener);
+  }
+  sendValue(payload: any) {
+    this.listeners.forEach((listener) => {
+      listener(payload);
+    });
+  }
+}
+
+class Group extends Control {
+  public spec: GroupSpec;
+
+  constructor(
+    spec: GroupSpecWithoutControls,
+    public controls: ControlsDict,
+  ) {
+    super();
+    const controlSpecs: ControlSpecsDict = {}
+    for(let id in controls) {
+      controlSpecs[id] = controls[id].spec;
+    }
+    this.spec = {
+      ...spec,
+      controlSpecs,
+    }
+  }
+
+  handleMessage(_payload: any) {
+    // not going to happen
+  }
 }
 
 class Fader extends Control {
   public value: number;
   constructor(
-    public spec: ControlSpecs.FaderSpec,
+    public spec: FaderSpec,
     public onChange?: (value: number) => void,
   ) {
     super();
@@ -38,7 +84,7 @@ class Fader extends Control {
 class Pad extends Control {
   public pressed = false;
   constructor(
-    public spec: ControlSpecs.PadSpec,
+    public spec: PadSpec,
     public onPress?: (velocity: number) => void,
     public onRelease?: () => void,
   ) {
@@ -65,7 +111,7 @@ class Pad extends Control {
 class Switch extends Control {
   public on: boolean;
   constructor(
-    public spec: ControlSpecs.SwitchSpec,
+    public spec: SwitchSpec,
     public onToggle?: (on: boolean) => void,
   ) {
     super();
@@ -87,7 +133,7 @@ class Switch extends Control {
 class Selector extends Control {
   public index: number;
   constructor(
-    public spec: ControlSpecs.SelectorSpec,
+    public spec: SelectorSpec,
     public onSelect?: (index: number) => void,
   ) {
     super();
@@ -108,7 +154,7 @@ class Selector extends Control {
 
 class ConfirmButton extends Control {
   constructor(
-    public spec: ControlSpecs.ConfirmButtonSpec,
+    public spec: ConfirmButtonSpec,
     public onConfirmedPress?: () => void,
     public onPress?: () => void,
   ) {
@@ -132,7 +178,7 @@ class ConfirmButton extends Control {
 
 class Label extends Control {
   constructor(
-    public spec: ControlSpecs.PadSpec,
+    public spec: PadSpec,
   ) {
     super();
   }
@@ -144,7 +190,7 @@ class Label extends Control {
 
 class ConfirmSwitch extends Control {
   constructor(
-    public spec: ControlSpecs.ConfirmSwitchSpec,
+    public spec: ConfirmSwitchSpec,
     public onConfirmedOn?: (isOn: boolean) => void,
   ) {
     super();
@@ -160,108 +206,64 @@ class ConfirmSwitch extends Control {
   }
 }
 
-
-// Meters
-
-type Listener = (payload: any) => void;
-abstract class Meter {
-  abstract spec: MeterSpecs.MeterSpec;
-  private listeners: Listener[] = [];
-  addListener(listener: Listener) {
-    this.listeners.push(listener);
-  }
-  sendValue(payload: any) {
-    this.listeners.forEach((listener) => {
-      listener(payload);
-    });
-  }
-}
-
-class Cake extends Meter {
+class Cake extends Control {
   constructor(
-    public spec: MeterSpecs.CakeSpec,
+    public spec: CakeSpec,
   ) {
     super();
   }
-}
 
-
-class ReceiverBuilder {
-  private controls: { [id: string]: Control } = {};
-
-  private meters: { [id: string]: Meter } = {};
-
-  constructor(
-    private name: string, 
-  ) { }
-
-  addControl(control: Control, id?: string) {
-    if(id === undefined) {
-      id = this.makeUpId(control.spec.name, this.controls);
-    }
-    this.controls[id] = control;
-    return this;
-  }
-
-  addMeter(meter: Meter, id?: string) {
-    if(id === undefined) {
-      id = this.makeUpId(meter.spec.name, this.meters);
-    }
-    this.meters[id] = meter;
-  }
-
-  makeUpId(name: string, dict: {[id: string]: any}) {
-    let id = name
-    let i = 1
-    while(dict[id] !== undefined) {
-      id = name + (++i)
-    }
-    return id
-  }
-
-  build() {
-    return new Receiver(this.controls, this.meters, this.name);
+  handleMessage(_payload: any) {
+    // wont happen
   }
 }
+
+export type ControlsDict = Dict<Control>;
 
 class Receiver {
-  private randomId = randomId();
+  private id = randomId();
 
   constructor(
-    private controls: Dict<Control>, 
-    private meters: Dict<Meter>,
     private name: string,
+    private controls: ControlsDict, 
+    private info: string,
   ) {
     this.announce();
     this.listen();
-    for(let id in this.meters) {
-      const meter = this.meters[id];
-      meter.addListener((payload) => {
-        if(window.opener !== null) {
-          window.opener.postMessage(
-            new Messages.MeterMessage(id, payload, this.randomId),
-            '*'
-          );
-        }
-      })
-    }
+    this.setupListeners(this.controls, []);
     window.addEventListener('beforeunload', () => {
       this.sendTabClosing();
     })
   }
 
+  setupListeners(controls: ControlsDict, path: string[]) {
+    for(let id in controls) {
+      const control = controls[id];
+      const controlId = path.concat(id);
+      if(control.spec.type === 'group') {
+        const group = control as Group;
+        this.setupListeners(group.controls, controlId);
+      } else {
+        control.addListener((payload) => {
+          if(window.opener !== null) {
+            window.opener.postMessage(
+              new Messages.MeterMessage(controlId, payload, this.id),
+              '*'
+            );
+          }
+        })
+      }
+    }
+  }
+
   announce() {
     if(window.opener !== null) {
-      const meterSpecs: Dict<MeterSpecs.MeterSpec> = {}
-      for(let id in this.meters) {
-        meterSpecs[id] = this.meters[id].spec;
-      }
-      const controlSpecs: Dict<ControlSpecs.ControlSpec> = {}
+      const controlSpecs: Dict<ControlSpec> = {}
       for(let id in this.controls) {
         controlSpecs[id] = this.controls[id].spec;
       }
       window.opener.postMessage(
-        new Messages.AnnounceReceiver(this.name, controlSpecs, meterSpecs, this.randomId),
+        new Messages.AnnounceReceiver(this.name, this.info, controlSpecs, this.id),
         '*'
       );
     }
@@ -274,12 +276,21 @@ class Receiver {
         const type = data.type;
         if(type === Messages.ControlMessage.type) {
           const msg = data as Messages.ControlMessage;
-          const control = this.controls[msg.controlId]
+          const control = this.getControl(this.controls, msg.controlId);
           console.log('received control message', msg);
           control.handleMessage(msg.payload);
         }
       }
     });
+  }
+
+  getControl(controls: ControlsDict, id: string[]): Control {
+    if(id.length > 1) {
+      const group = controls[id[0]] as Group;
+      return this.getControl(group.controls, id.slice(1))
+    } else {
+      return controls[id[0]];
+    }
   }
 
   sendTabClosing() {
@@ -294,7 +305,6 @@ class Receiver {
 
 export {
   Receiver, 
-  ReceiverBuilder,
   Fader,
   Pad,
   Switch,
@@ -304,5 +314,6 @@ export {
   ConfirmSwitch, 
   // meters
   Cake,
+  Group, 
 }
 

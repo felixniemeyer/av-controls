@@ -1,4 +1,17 @@
-type ControlType = 'fader' | 'pad' | 'switch' | 'selector' | 'confirm-button' | 'label' | 'confirm-switch';
+import { Dict } from "./dict";
+
+export type ControlType = 
+  'group' |
+	'fader' |
+	'pad' |
+	'switch' |
+	'selector' |
+	'confirm-button' |
+	'label' |
+	'confirm-switch' |
+	'cake';
+
+export type ControlSpecsDict = Dict<ControlSpec>;
 
 export class ControlSpec {
   constructor(
@@ -10,6 +23,38 @@ export class ControlSpec {
     public height: number,
     public color: string, 
   ) {
+  }
+}
+
+export type GroupStyle = 'framed' | 'logical' | 'page';
+export class GroupSpecWithoutControls extends ControlSpec {
+  // this control is special as it contains other controls
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public style: GroupStyle = 'framed',
+  ) {
+    super('group', name, x, y, width, height, color);
+  }
+}
+
+export class GroupSpec extends ControlSpec {
+  // this control is special as it contains other controls
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public controlSpecs: ControlSpecsDict, 
+    public style?: GroupStyle,
+  ) {
+    super('group', name, x, y, width, height, color);
   }
 }
 
@@ -112,4 +157,22 @@ export class ConfirmSwitchSpec extends ControlSpec {
   ) {
     super('confirm-switch', name, x, y, width, height, color);
   }
+}
+
+export class CakeSpec extends ControlSpec {
+  constructor(
+    name: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string, 
+    public min: number, 
+    public max: number,
+    public initialValue: number,
+    public decimalPlaces: number,
+  ) { 
+    super('cake', name, x, y, width, height, color);
+  }
+
 }
