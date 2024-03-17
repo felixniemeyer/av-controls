@@ -10,7 +10,7 @@ import {
   ConfirmButtonSpec,
   ConfirmSwitchSpec,
   CakeSpec,
-  ControlSpecsDict,
+  type ControlSpecsDict,
 } from './control-specs'
 import Messages from './messages'
 
@@ -277,7 +277,6 @@ class Receiver {
         if(type === Messages.ControlMessage.type) {
           const msg = data as Messages.ControlMessage;
           const control = this.getControl(this.controls, msg.controlId);
-          console.log('received control message', msg);
           control.handleMessage(msg.payload);
         }
       }

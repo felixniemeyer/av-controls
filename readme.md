@@ -10,8 +10,8 @@ import {
 	FaderSpec,
 } from 'av-controls';
 
-// create a recever builder
-const receiverBuilder = new ReceiverBuilder('my-app-name')
+// create a controls dict
+const controls: ControlsDict = {}
 
 // define
 const spec = new FaderSpec(
@@ -24,13 +24,46 @@ const spec = new FaderSpec(
   2             // displayed decimal places 
 )
 this.bpmFader = new Fader(spec, (value: number) => {
-  ... // do something with value
+  // ... do something with value
 })
-receiverBuilder.addControl(this.bpmFader)
+controls['<controller id>'] = this.bpmFader
+
+// ... add more controls
 
 // create the receiver. 
 // this will announce the controls spec to the opener tab
-const receiver = receiverBuilder.build()
+const receiver = new Receiver('<app name>', controls, '<info text>')
+```
+
+## Groups
+There is one control type called `Group`. 
+You can use it e.g. to visually group a set of controls. 
+
+```
+controls['<id>'] = new Group(new GroupSpecWithoutControls('visual', 60, 0, 20, 100, '#440'), visualControls)
+```
+... where visualControls is a `ControlsDict` itself. 
+
+Positioning and size of the child controls is relative to the group's position and size. 
+
+## Positioning in percent of parent
+Values for positions and sizes are in unit percent of the container space. 
+
+## There are various controls
+Look into `./src/control-specs.ts` to see which controls are available. 
+
+As of writing this, these here are: 
+```
+class GroupSpecWithoutControls
+class GroupSpec
+class FaderSpec
+class PadSpec
+class SwitchSpec
+class SelectorSpec
+class ConfirmButtonSpec
+class LabelSpec
+class ConfirmSwitchSpec
+class CakeSpec
 ```
 
 ## AV-Controller

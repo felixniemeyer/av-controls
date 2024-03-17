@@ -1,4 +1,4 @@
-import { Dict } from "./dict";
+import { type Dict } from "./dict";
 
 export type ControlType = 
   'group' |
