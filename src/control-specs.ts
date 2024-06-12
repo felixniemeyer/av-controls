@@ -174,5 +174,38 @@ export class CakeSpec extends ControlSpec {
   ) { 
     super('cake', name, x, y, width, height, color);
   }
-
 }
+
+export class TabbedPagesSpecWithoutControls extends ControlSpec {
+  // this control is special as it contains other controls
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public columns: number = 100, 
+    public rows: number = 100,
+  ) {
+    super('tabbed-pages', name, x, y, width, height, color);
+  }
+}
+
+export class TabbedPagesSpec extends ControlSpec {
+  // this control is special as it contains other controls
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public columns: number, 
+    public rows: number,
+    public pageSpecs: Dict<ControlSpecsDict>, 
+  ) {
+    super('tabbed-pages', name, x, y, width, height, color);
+  }
+}
+

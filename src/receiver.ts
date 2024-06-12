@@ -3,6 +3,8 @@ import {
   ControlSpec, 
   GroupSpec,
   GroupSpecWithoutControls,
+  TabbedPagesSpec,
+  TabbedPagesSpecWithoutControls,
   PadSpec,
   FaderSpec,
   SwitchSpec,
@@ -56,6 +58,34 @@ class Group extends Control {
   handleMessage(_payload: any) {
     // not going to happen
   }
+}
+
+class TabbedPages extends Control {
+	public spec: TabbedPagesSpec;
+
+	constructor(
+		spec: TabbedPagesSpecWithoutControls,
+		public pages: Dict<ControlsDict>,
+	) {
+		super();
+		const pageSpecs: Dict<ControlSpecsDict> = {}
+		for(let pageName in pages) {
+			const page = pages[pageName];
+			pageSpecs[pageName] = {} as ControlSpecsDict
+			for(let controlId in page) {
+				console.log('reading spec of', pageName, controlId)
+				pageSpecs[pageName][controlId] = page[controlId].spec; 
+			}
+		}
+		this.spec = {
+			...spec,
+			pageSpecs,
+		}
+	}
+
+	handleMessage(_payload: any) {
+		// not going to happen
+	}
 }
 
 class Fader extends Control {
@@ -285,8 +315,12 @@ class Receiver {
 
   getControl(controls: ControlsDict, id: string[]): Control {
     if(id.length > 1) {
-      const group = controls[id[0]] as Group;
-      return this.getControl(group.controls, id.slice(1))
+      const node = controls[id[0]];
+      if(node instanceof Group) {
+				return this.getControl(node.controls, id.slice(1))
+			} else if (node instanceof TabbedPages) {
+				return this.getControl(node.pages[id[1]], id.slice(2))
+			}
     } else {
       return controls[id[0]];
     }
@@ -314,5 +348,6 @@ export {
   // meters
   Cake,
   Group, 
+  TabbedPages,
 }
 
