@@ -13,15 +13,19 @@ export type ControlType =
 
 export type ControlSpecsDict = Dict<ControlSpec>;
 
+export interface BaseSpec {
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  color: string
+}
+
 export class ControlSpec {
   constructor(
     public type: ControlType,
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string, 
+  	public base: BaseSpec,
   ) {
   }
 }
@@ -30,149 +34,103 @@ export type GroupStyle = 'framed' | 'logical' | 'page';
 export class GroupSpecWithoutControls extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    public base: BaseSpec,
     public style: GroupStyle = 'framed',
+    public columns: number = 100, 
+    public rows: number = 100,
   ) {
-    super('group', name, x, y, width, height, color);
+    super('group', base);
   }
 }
 
 export class GroupSpec extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    public base: BaseSpec,
     public controlSpecs: ControlSpecsDict, 
     public style?: GroupStyle,
+    public columns?: number, 
+    public rows?: number,
   ) {
-    super('group', name, x, y, width, height, color);
+    super('group', base);
   }
 }
 
 export class FaderSpec extends ControlSpec {
   constructor(
-    name: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    color: string, 
+    public base: BaseSpec,
     public initialValue: number,
     public min: number, 
     public max: number,
     public decimalPlaces: number,
   ) { 
-    super('fader', name, x, y, width, height, color);
+    super('fader', base);
   }
 
 }
 
 export class PadSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+  	public base: BaseSpec,
   ) {
-    super('pad', name, x, y, width, height, color);
+    super('pad', base);  
   }
 }
 
 export class SwitchSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+  	public base: BaseSpec,
     public initiallyOn: boolean = false
   ) {
-    super('switch', name, x, y, width, height, color);
+    super('switch', base);
   }
 }
 
 export class SelectorSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    public base: BaseSpec,
     public options: string[],
     public initialIndex: number,
   ) {
-    super('selector', name, x, y, width, height, color);
+    super('selector', base);
   }
 }
 
 export class ConfirmButtonSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+  	base: BaseSpec,
   ) {
-    super('confirm-button', name, x, y, width, height, color);
+    super('confirm-button', base);
   }
 }
 
 export class LabelSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    public base: BaseSpec,
     public labelPosition: 'top' | 'center' | 'bottom',
   ) {
-    super('label', name, x, y, width, height, color);
+    super('label', base);
   }
 }
 
 export class ConfirmSwitchSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    public base: BaseSpec,
     public initiallyOn: boolean = false
   ) {
-    super('confirm-switch', name, x, y, width, height, color);
+    super('confirm-switch', base);
   }
 }
 
 export class CakeSpec extends ControlSpec {
   constructor(
-    name: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    color: string, 
+    public base: BaseSpec,
     public min: number, 
     public max: number,
     public initialValue: number,
     public decimalPlaces: number,
   ) { 
-    super('cake', name, x, y, width, height, color);
+    super('cake', base);
   }
 
 }
