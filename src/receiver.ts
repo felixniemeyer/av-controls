@@ -12,6 +12,8 @@ import {
   ConfirmButtonSpec,
   ConfirmSwitchSpec,
   CakeSpec,
+  PresetButtonSpec, 
+  LetterboxSpec, 
   type ControlSpecsDict,
 } from './control-specs'
 import Messages from './messages'
@@ -73,7 +75,6 @@ class TabbedPages extends Control {
 			const page = pages[pageName];
 			pageSpecs[pageName] = {} as ControlSpecsDict
 			for(let controlId in page) {
-				console.log('reading spec of', pageName, controlId)
 				pageSpecs[pageName][controlId] = page[controlId].spec; 
 			}
 		}
@@ -248,6 +249,35 @@ class Cake extends Control {
   }
 }
 
+class PresetButton extends Control {
+	constructor(
+		public spec: PresetButtonSpec,
+	) {
+		super();
+	}
+
+	handleMessage(_payload: any) {
+		// wont happen
+	}
+}
+
+class Letterbox extends Control {
+	constructor(
+		public spec: LetterboxSpec,
+		public onLetter: (letter: string) => void,
+	) {
+		super();
+	}
+
+	handleMessage(payload: any) {
+		if(typeof payload === 'string') {
+			this.onLetter(payload);
+		} else {
+			throw('received letter that is not a string');
+		}
+	}
+}
+
 export type ControlsDict = Dict<Control>;
 
 class Receiver {
@@ -307,13 +337,15 @@ class Receiver {
         if(type === Messages.ControlMessage.type) {
           const msg = data as Messages.ControlMessage;
           const control = this.getControl(this.controls, msg.controlId);
-          control.handleMessage(msg.payload);
+          if(control) {
+						control.handleMessage(msg.payload);
+					}
         }
       }
     });
   }
 
-  getControl(controls: ControlsDict, id: string[]): Control {
+  getControl(controls: ControlsDict, id: string[]): Control | undefined {
     if(id.length > 1) {
       const node = controls[id[0]];
       if(node instanceof Group) {
@@ -347,7 +379,9 @@ export {
   ConfirmSwitch, 
   // meters
   Cake,
+  PresetButton,
   Group, 
   TabbedPages,
+	Letterbox, 
 }
 

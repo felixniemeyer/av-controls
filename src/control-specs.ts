@@ -2,6 +2,7 @@ import { type Dict } from "./dict";
 
 export type ControlType = 
   'group' |
+  'tabbed-pages' |
 	'fader' |
 	'pad' |
 	'switch' |
@@ -9,7 +10,10 @@ export type ControlType =
 	'confirm-button' |
 	'label' |
 	'confirm-switch' |
-	'cake';
+	'letterbox' |
+	'cake' |
+	'preset-button' 
+;
 
 export type ControlSpecsDict = Dict<ControlSpec>;
 
@@ -176,6 +180,20 @@ export class CakeSpec extends ControlSpec {
   }
 }
 
+export class PresetButtonSpec extends ControlSpec {
+	constructor(
+		public name: string,
+		public x: number,
+		public y: number,
+		public width: number,
+		public height: number,
+		public color: string,
+		public stencil: any,
+	) {
+		super('preset-button', name, x, y, width, height, color);
+	}
+}
+
 export class TabbedPagesSpecWithoutControls extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
@@ -209,3 +227,15 @@ export class TabbedPagesSpec extends ControlSpec {
   }
 }
 
+export class LetterboxSpec extends ControlSpec {
+	constructor(
+		public name: string,
+		public x: number,
+		public y: number,
+		public width: number,
+		public height: number,
+		public color: string,
+	) {
+		super('letterbox', name, x, y, width, height, color);
+	}
+}
