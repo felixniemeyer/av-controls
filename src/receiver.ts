@@ -14,13 +14,10 @@ import {
   CakeSpec,
   PresetButtonSpec, 
   LetterboxSpec, 
+  TextboxSpec,
   type ControlSpecsDict,
 } from './control-specs'
 import Messages from './messages'
-
-function randomId() {
-  return ((Math.random() + 1) * Math.pow(36, 9)).toString(36).substring(0,10)
-}
 
 type Listener = (payload: any) => void;
 
@@ -264,16 +261,39 @@ class PresetButton extends Control {
 class Letterbox extends Control {
 	constructor(
 		public spec: LetterboxSpec,
-		public onLetter: (letter: string) => void,
+		public onLetter?: (letter: string) => void,
 	) {
 		super();
 	}
 
 	handleMessage(payload: any) {
 		if(typeof payload === 'string') {
-			this.onLetter(payload);
+			if(this.onLetter) {
+				this.onLetter(payload);
+			}
 		} else {
 			throw('received letter that is not a string');
+		}
+	}
+}
+
+class Textbox extends Control {
+	public text: string = '';
+
+	constructor(
+		public spec: TextboxSpec, 
+		public onTextChange?: (text: string) => void, 
+	) {
+		super(); 
+	}
+
+	handleMessage(payload: any): void {
+		if(typeof payload === 'string') {
+			if(this.onTextChange) {
+				this.onTextChange(payload);
+			}
+		} else {
+			throw('received text that is not a string');
 		}
 	}
 }
@@ -281,19 +301,27 @@ class Letterbox extends Control {
 export type ControlsDict = Dict<Control>;
 
 class Receiver {
-  private id = randomId();
+  private id = -1;
 
   constructor(
     private name: string,
     private controls: ControlsDict, 
-    private info: string,
+    private controllerTab: Window = window.opener || window.parent
   ) {
-    this.announce();
     this.listen();
-    this.setupListeners(this.controls, []);
+    this.setupListeners(controls, []); 
+    this.send(new Messages.Ready());
     window.addEventListener('beforeunload', () => {
       this.sendTabClosing();
     })
+  }
+
+  send(message: any) {
+  	this.controllerTab.postMessage({
+				protocol: 'av-controls',
+				...message
+			}, '*'
+		);
   }
 
   setupListeners(controls: ControlsDict, path: string[]) {
@@ -305,43 +333,39 @@ class Receiver {
         this.setupListeners(group.controls, controlId);
       } else {
         control.addListener((payload) => {
-          if(window.opener !== null) {
-            window.opener.postMessage(
-              new Messages.MeterMessage(controlId, payload, this.id),
-              '*'
-            );
-          }
+					this.send(
+						new Messages.MeterMessage(controlId, payload, this.id),
+					);
         })
       }
     }
   }
 
   announce() {
-    if(window.opener !== null) {
-      const controlSpecs: Dict<ControlSpec> = {}
-      for(let id in this.controls) {
-        controlSpecs[id] = this.controls[id].spec;
-      }
-      window.opener.postMessage(
-        new Messages.AnnounceReceiver(this.name, this.info, controlSpecs, this.id),
-        '*'
-      );
-    }
+		const controlSpecs: Dict<ControlSpec> = {}
+		for(let id in this.controls) {
+			controlSpecs[id] = this.controls[id].spec;
+		}
+		const msg = new Messages.AnnounceReceiver(this.name, controlSpecs, this.id);
+		this.send(
+			msg, 
+		);
   }
 
   listen() {
     window.addEventListener('message', (event) => {
-      if(window.opener !== null) {
-        const data = event.data;
-        const type = data.type;
-        if(type === Messages.ControlMessage.type) {
-          const msg = data as Messages.ControlMessage;
-          const control = this.getControl(this.controls, msg.controlId);
-          if(control) {
-						control.handleMessage(msg.payload);
-					}
-        }
-      }
+			const data = event.data;
+			const type = data.type;
+			if(type === Messages.YouAre.type) {
+				this.id = data.id;
+				this.announce()
+			} else if(type === Messages.ControlMessage.type) {
+				const msg = data as Messages.ControlMessage;
+				const control = this.getControl(this.controls, msg.controlId);
+				if(control) {
+					control.handleMessage(msg.payload);
+				}
+			}
     });
   }
 
@@ -359,12 +383,9 @@ class Receiver {
   }
 
   sendTabClosing() {
-    if(window.opener !== null) {
-      window.opener.postMessage(
-        new Messages.TabClosing(), 
-        '*'
-      );
-    }
+		this.send(
+			new Messages.TabClosing()
+		);
   }
 }
 
@@ -377,11 +398,11 @@ export {
   ConfirmButton,
   Label,
   ConfirmSwitch, 
-  // meters
   Cake,
   PresetButton,
   Group, 
   TabbedPages,
 	Letterbox, 
+	Textbox,
 }
 

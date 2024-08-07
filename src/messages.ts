@@ -3,6 +3,23 @@ import { type ControlSpecsDict } from './control-specs';
 export type ControlId = string[]
 
 namespace Messages {
+	export class Ready {
+		static type = 'ready';
+
+		type = Ready.type;
+		constructor() {}
+	}
+
+	export class YouAre {
+		static type = 'you-are';
+
+		type = YouAre.type;
+
+		constructor(
+			public id: number,
+		) {}
+	}
+
   export class AnnounceReceiver {
     static type = 'announce-receiver';
 
@@ -10,9 +27,8 @@ namespace Messages {
 
     constructor(
       public name: string,
-      public info: string,
       public controlSpecs: ControlSpecsDict,
-      public receiverId: string,
+      public receiverId: number,
     ) { }
   }
 
@@ -35,7 +51,7 @@ namespace Messages {
     constructor(
       public controlId: ControlId,
       public payload: any,
-      public receiverId: string,
+      public receiverId: number,
     ) {}
   }
 

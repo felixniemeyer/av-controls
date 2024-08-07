@@ -12,7 +12,8 @@ export type ControlType =
 	'confirm-switch' |
 	'letterbox' |
 	'cake' |
-	'preset-button' 
+	'preset-button' |
+	'textbox'
 ;
 
 export type ControlSpecsDict = Dict<ControlSpec>;
@@ -239,3 +240,18 @@ export class LetterboxSpec extends ControlSpec {
 		super('letterbox', name, x, y, width, height, color);
 	}
 }
+
+export class TextboxSpec extends ControlSpec {
+	constructor(
+		public name: string,
+		public x: number,
+		public y: number,
+		public width: number,
+		public height: number,
+		public color: string,
+		public initialText: string,
+	) {
+		super('textbox', name, x, y, width, height, color);
+	}
+}
+
