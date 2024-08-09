@@ -1,4 +1,4 @@
-import { type ControlSpecsDict } from './control-specs';
+import type { ControlSpecsDict } from './control-specs';
 
 export type ControlId = string[]
 

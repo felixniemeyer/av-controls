@@ -1,4 +1,5 @@
-import {type Dict} from './dict';
+import type {Dict} from './dict';
+
 import {
   ControlSpec, 
   GroupSpec,
@@ -380,6 +381,7 @@ class Receiver {
     } else {
       return controls[id[0]];
     }
+    return undefined
   }
 
   sendTabClosing() {
