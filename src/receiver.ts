@@ -16,7 +16,10 @@ import {
   PresetButtonSpec, 
   LetterboxSpec, 
   TextboxSpec,
+  DotsSpec,
   type ControlSpecsDict,
+  Dot,
+  KnobSpec,
 } from './control-specs'
 import Messages from './messages'
 
@@ -299,8 +302,52 @@ class Textbox extends Control {
 	}
 }
 
-export type ControlsDict = Dict<Control>;
+class Dots extends Control {
+  values: Dot[]
 
+  constructor(
+    public spec: DotsSpec,
+    public onDotsChange?: (dots: Dot[]) => void,
+  ) {
+    super();
+    this.values = spec.initialValues;
+  }
+
+  handleMessage(payload: any) {
+    if(payload.type === 'ud') {
+      const index = payload.index;
+      const value = payload.value;
+      this.values[index] = value;
+      if(this.onDotsChange) {
+        this.onDotsChange(this.values);
+      }
+    } else {
+      throw(`unknown dots message type: ${payload.type}`);
+    }
+  }
+}
+
+// like fader but with a knob
+class Knob extends Control {
+  public value: number;
+
+  constructor(
+    public spec: KnobSpec,
+  ) {
+    super();
+    this.value = spec.initialValue;
+  }
+
+  handleMessage(payload: any) {
+    if(typeof payload === 'number') {
+      this.value = payload;
+    } else {
+      throw('received knob value that is not a number');
+    }
+  }
+}
+
+export type ControlsDict = Dict<Control>;
 class Receiver {
   private id = -1;
 
@@ -406,5 +453,7 @@ export {
   TabbedPages,
 	Letterbox, 
 	Textbox,
+  Dots,
+  Knob,
 }
 

@@ -13,7 +13,9 @@ export type ControlType =
 	'letterbox' |
 	'cake' |
 	'preset-button' |
-	'textbox'
+	'textbox' |
+	'dots' |
+	'knob'
 ;
 
 export type ControlSpecsDict = Dict<ControlSpec>;
@@ -255,3 +257,38 @@ export class TextboxSpec extends ControlSpec {
 	}
 }
 
+export type Dot = [number, number]
+
+export class DotsSpec extends ControlSpec {
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public initialValues: Dot[],
+    public ensureXOrder: boolean = true,
+    public ensureYOrder: boolean = false,
+//    public displayStyle: 'curve' | 'polygon',
+  ) {
+    super('dots', name, x, y, width, height, color);
+  }
+}
+
+export class KnobSpec extends ControlSpec {
+  constructor(
+    public name: string,
+    public x: number,
+    public y: number,
+    public width: number,
+    public height: number,
+    public color: string,
+    public initialValue: number,
+    public min: number,
+    public max: number,
+    public decimalPlaces: number,
+  ) {
+    super('knob', name, x, y, width, height, color);
+  }
+}
