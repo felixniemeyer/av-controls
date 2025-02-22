@@ -1,7 +1,4 @@
-import Messages from './messages';
-export * from './control-specs';
+export * as Messages from './messages';
+export * as Specs from './control-specs';
+export * as Controls from './controls';
 export * from './receiver';
-
-export {
-  Messages, 
-}

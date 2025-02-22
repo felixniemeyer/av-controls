@@ -60,13 +60,3 @@ export class TabClosing {
   type = TabClosing.type;
 }
 
-const Messages = {
-  Ready,
-  YouAre,
-  AnnounceReceiver,
-  ControlMessage,
-  MeterMessage,
-  TabClosing,
-};
-
-export default Messages;

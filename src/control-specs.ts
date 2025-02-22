@@ -1,35 +1,33 @@
-import type { Dict } from "./dict";
+export type ControlSpecsDict = {[id: string]: ControlSpec};
 
-export type ControlType = 
-  'group' |
-  'tabbed-pages' |
-	'fader' |
-	'pad' |
-	'switch' |
-	'selector' |
-	'confirm-button' |
-	'label' |
-	'confirm-switch' |
-	'letterbox' |
-	'cake' |
-	'preset-button' |
-	'textbox' |
-	'dots' |
-	'knob'
-;
-
-export type ControlSpecsDict = Dict<ControlSpec>;
-
-export class ControlSpec {
+export class BaseArgs {
   constructor(
-    public type: ControlType,
     public name: string,
     public x: number,
     public y: number,
     public width: number,
     public height: number,
-    public color: string, 
+    public color: string,
+  ) {}
+}
+
+export class ControlSpec {
+  public type: string = ''
+  public name: string
+  public x: number
+  public y: number
+  public width: number
+  public height: number
+  public color: string
+  constructor(
+    baseArgs: BaseArgs,
   ) {
+    this.name = baseArgs.name
+    this.x = baseArgs.x
+    this.y = baseArgs.y
+    this.width = baseArgs.width
+    this.height = baseArgs.height
+    this.color = baseArgs.color
   }
 }
 
@@ -37,225 +35,165 @@ export type GroupStyle = 'framed' | 'logical' | 'page';
 export class GroupSpecWithoutControls extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public style: GroupStyle = 'framed',
   ) {
-    super('group', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'group';
   }
 }
 
 export class GroupSpec extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public controlSpecs: ControlSpecsDict, 
     public style?: GroupStyle,
   ) {
-    super('group', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'group';
   }
 }
 
 export class FaderSpec extends ControlSpec {
   constructor(
-    name: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    color: string, 
+    baseArgs: BaseArgs,
     public initialValue: number,
     public min: number, 
     public max: number,
     public decimalPlaces: number,
   ) { 
-    super('fader', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'fader';
   }
 
 }
 
 export class PadSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
   ) {
-    super('pad', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'pad';
   }
 }
 
 export class SwitchSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public initiallyOn: boolean = false
   ) {
-    super('switch', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'switch';
   }
 }
 
 export class SelectorSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public options: string[],
     public initialIndex: number,
   ) {
-    super('selector', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'selector';
   }
 }
 
 export class ConfirmButtonSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
   ) {
-    super('confirm-button', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'confirm-button';
   }
 }
 
 export class LabelSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public labelPosition: 'top' | 'center' | 'bottom',
   ) {
-    super('label', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'label';
   }
 }
 
 export class ConfirmSwitchSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public initiallyOn: boolean = false
   ) {
-    super('confirm-switch', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'confirm-switch';
   }
 }
 
 export class CakeSpec extends ControlSpec {
   constructor(
-    name: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    color: string, 
+    baseArgs: BaseArgs,
     public min: number, 
     public max: number,
     public initialValue: number,
     public decimalPlaces: number,
   ) { 
-    super('cake', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'cake';
   }
 }
 
 export class PresetButtonSpec extends ControlSpec {
 	constructor(
-		public name: string,
-		public x: number,
-		public y: number,
-		public width: number,
-		public height: number,
-		public color: string,
+    baseArgs: BaseArgs,
 		public stencil: any,
 	) {
-		super('preset-button', name, x, y, width, height, color);
+		super(baseArgs);
+    this.type = 'preset-button';
 	}
 }
 
 export class TabbedPagesSpecWithoutControls extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public columns: number = 100, 
     public rows: number = 100,
     public initialPageIndex: number = 0,
   ) {
-    super('tabbed-pages', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'tabbed-pages';
   }
 }
 
 export class TabbedPagesSpec extends ControlSpec {
   // this control is special as it contains other controls
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public columns: number, 
     public rows: number,
-    public pageSpecs: Dict<ControlSpecsDict>, 
+    public pageSpecs: {[id: string]: ControlSpecsDict}, 
     public initialPageIndex: number,
   ) {
-    super('tabbed-pages', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'tabbed-pages';
   }
 }
 
 export class LetterboxSpec extends ControlSpec {
 	constructor(
-		public name: string,
-		public x: number,
-		public y: number,
-		public width: number,
-		public height: number,
-		public color: string,
+    baseArgs: BaseArgs,
 	) {
-		super('letterbox', name, x, y, width, height, color);
+		super(baseArgs);
+    this.type = 'letterbox';
 	}
 }
 
 export class TextboxSpec extends ControlSpec {
 	constructor(
-		public name: string,
-		public x: number,
-		public y: number,
-		public width: number,
-		public height: number,
-		public color: string,
+    baseArgs: BaseArgs,
 		public initialText: string,
 	) {
-		super('textbox', name, x, y, width, height, color);
+		super(baseArgs);
+    this.type = 'textbox';
 	}
 }
 
@@ -263,34 +201,26 @@ export type Dot = [number, number]
 
 export class DotsSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public initialValues: Dot[],
     public ensureXOrder: boolean = true,
     public ensureYOrder: boolean = false,
 //    public displayStyle: 'curve' | 'polygon',
   ) {
-    super('dots', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'dots';
   }
 }
 
 export class KnobSpec extends ControlSpec {
   constructor(
-    public name: string,
-    public x: number,
-    public y: number,
-    public width: number,
-    public height: number,
-    public color: string,
+    baseArgs: BaseArgs,
     public initialValue: number,
     public min: number,
     public max: number,
     public decimalPlaces: number,
   ) {
-    super('knob', name, x, y, width, height, color);
+    super(baseArgs);
+    this.type = 'knob';
   }
 }
