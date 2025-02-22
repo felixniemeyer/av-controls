@@ -321,6 +321,11 @@ class Dots extends Control {
       if(this.onDotsChange) {
         this.onDotsChange(this.values);
       }
+    } else if(payload.type === 'full') {
+      this.values = payload.values;
+      if(this.onDotsChange) {
+        this.onDotsChange(this.values);
+      }
     } else {
       throw(`unknown dots message type: ${payload.type}`);
     }

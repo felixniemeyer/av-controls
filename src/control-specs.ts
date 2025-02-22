@@ -208,6 +208,7 @@ export class TabbedPagesSpecWithoutControls extends ControlSpec {
     public color: string,
     public columns: number = 100, 
     public rows: number = 100,
+    public initialPageIndex: number = 0,
   ) {
     super('tabbed-pages', name, x, y, width, height, color);
   }
@@ -225,6 +226,7 @@ export class TabbedPagesSpec extends ControlSpec {
     public columns: number, 
     public rows: number,
     public pageSpecs: Dict<ControlSpecsDict>, 
+    public initialPageIndex: number,
   ) {
     super('tabbed-pages', name, x, y, width, height, color);
   }
