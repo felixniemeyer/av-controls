@@ -1,7 +1,7 @@
 import { ControlSpec } from './control-specs'; 
 import * as Messages from './messages'
 
-import { ControlsDict, Control, Group, TabbedPages } from './controls'
+import { ControlsDict, Control, Group, TabbedPages, NetPanel } from './controls'
 
 export class Receiver {
   private id = -1;
@@ -9,7 +9,7 @@ export class Receiver {
   constructor(
     private name: string,
     private controls: ControlsDict, 
-    private controllerTab: Window = window.opener || window.parent
+    private controllerTab: Window = window.opener || window.parent,
   ) {
     this.listen();
     this.setupListeners(controls, []); 
@@ -37,7 +37,7 @@ export class Receiver {
       } else {
         control.addListener((payload) => {
 					this.send(
-						new Messages.MeterMessage(controlId, payload, this.id),
+						new Messages.MeterMessage(controlId, payload),
 					);
         })
       }
@@ -49,9 +49,9 @@ export class Receiver {
 		for(let id in this.controls) {
 			controlSpecs[id] = this.controls[id].spec;
 		}
-		const msg = new Messages.AnnounceReceiver(this.name, controlSpecs, this.id);
+    console.log('announcing', this.name, controlSpecs)
 		this.send(
-			msg, 
+      new Messages.AnnounceReceiver(this.name, controlSpecs)
 		);
   }
 
@@ -59,10 +59,9 @@ export class Receiver {
     window.addEventListener('message', (event) => {
 			const data = event.data;
 			const type = data.type;
-			if(type === Messages.YouAre.type) {
-				this.id = data.id;
+			if(type === 'nudge') {
 				this.announce()
-			} else if(type === Messages.ControlMessage.type) {
+			} else if(type === 'control-message') {
 				const msg = data as Messages.ControlMessage;
 				const control = this.getControl(this.controls, msg.controlId);
 				if(control) {
@@ -79,6 +78,8 @@ export class Receiver {
 				return this.getControl(node.controls, id.slice(1))
 			} else if (node instanceof TabbedPages) {
 				return this.getControl(node.pages[id[1]], id.slice(2))
+			} else if (node instanceof NetPanel) {
+				return this.getControl(node.controls, id.slice(1))
 			}
     } else {
       return controls[id[0]];

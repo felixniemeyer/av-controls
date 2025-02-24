@@ -224,3 +224,22 @@ export class KnobSpec extends ControlSpec {
     this.type = 'knob';
   }
 }
+
+export class NetPanelSpecWithoutControls extends ControlSpec {
+  constructor(
+    baseArgs: BaseArgs,
+  ) {
+    super(baseArgs);
+    this.type = 'net-panel';
+  }
+}
+
+export class NetPanelSpec extends ControlSpec {
+  constructor(
+    baseArgs: BaseArgs,
+    public controlSpecs: ControlSpecsDict,
+  ) {
+    super(baseArgs);
+    this.type = 'net-panel';
+  }
+}

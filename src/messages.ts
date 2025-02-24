@@ -9,32 +9,22 @@ export class Ready {
   constructor() {}
 }
 
-export class YouAre {
-  static type = 'you-are';
-
-  type = YouAre.type;
-
-  constructor(
-    public id: number,
-  ) {}
+export class Nudge {
+  type = 'nudge';
+  constructor() {}
 }
 
 export class AnnounceReceiver {
-  static type = 'announce-receiver';
-
-  type = AnnounceReceiver.type;
+  type = 'announce-receiver';
 
   constructor(
     public name: string,
     public controlSpecs: ControlSpecsDict,
-    public receiverId: number,
   ) { }
 }
 
 export class ControlMessage {
-  static type = 'control-message';
-
-  type = ControlMessage.type;
+  type = 'control-message';
 
   constructor(
     public controlId: ControlId,
@@ -43,20 +33,14 @@ export class ControlMessage {
 }
 
 export class MeterMessage {
-  static type = 'meter-message';
-
-  type = MeterMessage.type;
+  type = 'meter-message';
 
   constructor(
     public controlId: ControlId,
     public payload: any,
-    public receiverId: number,
   ) {}
 }
 
 export class TabClosing {
-  static type = 'tab-closing';
-
-  type = TabClosing.type;
+  type = 'tab-closing';
 }
-

@@ -329,3 +329,26 @@ export class Knob extends Control {
     }
   }
 }
+
+export class NetPanel extends Control {
+  public spec: Specs.NetPanelSpec;
+
+  constructor(
+    spec: Specs.NetPanelSpecWithoutControls,
+    public controls: ControlsDict,
+  ) {
+    super();
+    const controlSpecs: Specs.ControlSpecsDict = {}
+    for(let id in controls) {
+      controlSpecs[id] = controls[id].spec;
+    }
+    this.spec = {
+      ...spec,
+      controlSpecs,
+    }
+  }
+
+  handleMessage(_payload: any) {
+    // not going to happen
+  }
+}
