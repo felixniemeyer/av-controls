@@ -4,18 +4,20 @@ export type ControlId = string[]
 
 export class Ready {
   static type = 'ready';
-
   type = Ready.type;
+
   constructor() {}
 }
 
 export class Nudge {
-  type = 'nudge';
+  static type = 'nudge';
+  type = Nudge.type;
   constructor() {}
 }
 
-export class AnnounceReceiver {
-  type = 'announce-receiver';
+export class ControllerSpecification {
+  static type = 'controller-specification';
+  type = ControllerSpecification.type;
 
   constructor(
     public name: string,
@@ -23,8 +25,10 @@ export class AnnounceReceiver {
   ) { }
 }
 
-export class ControlMessage {
-  type = 'control-message';
+// signals go from the controller to the visuals, e.g. the bar cake, showing the percentage of the current bar
+export class ControlSignal {
+  static type = 'control-signal';
+  type = ControlSignal.type;
 
   constructor(
     public controlId: ControlId,
@@ -32,8 +36,10 @@ export class ControlMessage {
   ) {}
 }
 
-export class MeterMessage {
-  type = 'meter-message';
+// updates go from the visuals to the controller, e.g. the bar cake, showing the percentage of the current bar
+export class ControlUpdate {
+  static type = 'control-update';
+  type = ControlUpdate.type;
 
   constructor(
     public controlId: ControlId,
@@ -42,5 +48,6 @@ export class MeterMessage {
 }
 
 export class TabClosing {
-  type = 'tab-closing';
+  static type = 'tab-closing';
+  type = TabClosing.type;
 }

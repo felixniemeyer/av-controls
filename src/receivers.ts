@@ -1,24 +1,24 @@
 import * as Specs from './control-specs'
 
-export type ControlsDict = {[id: string]: Control};
+export type ControlsDict = {[id: string]: ControlReceiver};
 type Listener = (payload: any) => void;
 
-export abstract class Control {
+export abstract class ControlReceiver {
   abstract handleMessage(payload: any) : void;
   abstract spec: Specs.ControlSpec;
 
   private listeners: Listener[] = [];
-  addListener(listener: Listener) {
+  public setListener(listener: Listener) {
     this.listeners.push(listener);
   }
-  sendValue(payload: any) {
+  protected sendUpdate(payload: any) {
     this.listeners.forEach((listener) => {
       listener(payload);
-    });
+    })
   }
 }
 
-export class Group extends Control {
+export class Group extends ControlReceiver {
   public spec: Specs.GroupSpec;
 
   constructor(
@@ -30,10 +30,10 @@ export class Group extends Control {
     for(let id in controls) {
       controlSpecs[id] = controls[id].spec;
     }
-    this.spec = {
-      ...spec,
+    this.spec = new Specs.GroupSpec(
+      spec.baseArgs,
       controlSpecs,
-    }
+    )
   }
 
   handleMessage(_payload: any) {
@@ -41,7 +41,7 @@ export class Group extends Control {
   }
 }
 
-export class TabbedPages extends Control {
+export class TabbedPages extends ControlReceiver {
 	public spec: Specs.TabbedPagesSpec;
 
 	constructor(
@@ -54,13 +54,16 @@ export class TabbedPages extends Control {
 			const page = pages[pageName];
 			pageSpecs[pageName] = {} as Specs.ControlSpecsDict
 			for(let controlId in page) {
-				pageSpecs[pageName][controlId] = (page[controlId] as Control).spec; 
+				pageSpecs[pageName][controlId] = (page[controlId] as ControlReceiver).spec; 
 			}
 		}
-		this.spec = {
-			...spec,
+		this.spec = new Specs.TabbedPagesSpec(
+			spec.baseArgs,
+			spec.columns,
+			spec.rows,
 			pageSpecs,
-		}
+			spec.initialPageIndex,
+		)
 	}
 
 	handleMessage(_payload: any) {
@@ -68,7 +71,7 @@ export class TabbedPages extends Control {
 	}
 }
 
-export class Fader extends Control {
+export class Fader extends ControlReceiver {
   public value: number;
   constructor(
     public spec: Specs.FaderSpec,
@@ -91,7 +94,7 @@ export class Fader extends Control {
   }
 }
 
-export class Pad extends Control {
+export class Pad extends ControlReceiver {
   public pressed = false;
   constructor(
     public spec: Specs.PadSpec,
@@ -118,7 +121,7 @@ export class Pad extends Control {
   }
 }
 
-export class Switch extends Control {
+export class Switch extends ControlReceiver {
   public on: boolean;
   constructor(
     public spec: Specs.SwitchSpec,
@@ -140,7 +143,7 @@ export class Switch extends Control {
   }
 }
 
-export class Selector extends Control {
+export class Selector extends ControlReceiver {
   public index: number;
   constructor(
     public spec: Specs.SelectorSpec,
@@ -162,7 +165,7 @@ export class Selector extends Control {
   }
 }
 
-export class ConfirmButton extends Control {
+export class ConfirmButton extends ControlReceiver {
   constructor(
     public spec: Specs.ConfirmButtonSpec,
     public onConfirmedPress?: () => void,
@@ -186,7 +189,7 @@ export class ConfirmButton extends Control {
   }
 }
 
-export class Label extends Control {
+export class Label extends ControlReceiver {
   constructor(
     public spec: Specs.PadSpec,
   ) {
@@ -198,7 +201,7 @@ export class Label extends Control {
   }
 }
 
-export class ConfirmSwitch extends Control {
+export class ConfirmSwitch extends ControlReceiver {
   constructor(
     public spec: Specs.ConfirmSwitchSpec,
     public onConfirmedOn?: (isOn: boolean) => void,
@@ -216,7 +219,7 @@ export class ConfirmSwitch extends Control {
   }
 }
 
-export class Cake extends Control {
+export class Cake extends ControlReceiver {
   constructor(
     public spec: Specs.CakeSpec,
   ) {
@@ -226,9 +229,13 @@ export class Cake extends Control {
   handleMessage(_payload: any) {
     // wont happen
   }
+
+  sendValue(value: number) {
+    this.sendUpdate(value);
+  }
 }
 
-export class PresetButton extends Control {
+export class PresetButton extends ControlReceiver {
 	constructor(
 		public spec: Specs.PresetButtonSpec,
 	) {
@@ -238,9 +245,15 @@ export class PresetButton extends Control {
 	handleMessage(_payload: any) {
 		// wont happen
 	}
+
+  makeRandomSwitch() {
+    this.sendUpdate({
+      action: 'random'
+    });
+  }
 }
 
-export class Letterbox extends Control {
+export class Letterbox extends ControlReceiver {
 	constructor(
 		public spec: Specs.LetterboxSpec,
 		public onLetter?: (letter: string) => void,
@@ -259,7 +272,7 @@ export class Letterbox extends Control {
 	}
 }
 
-export class Textbox extends Control {
+export class Textbox extends ControlReceiver {
 	public text: string = '';
 
 	constructor(
@@ -280,7 +293,7 @@ export class Textbox extends Control {
 	}
 }
 
-export class Dots extends Control {
+export class Dots extends ControlReceiver {
   values: Specs.Dot[]
 
   constructor(
@@ -311,7 +324,7 @@ export class Dots extends Control {
 }
 
 // like fader but with a knob
-export class Knob extends Control {
+export class Knob extends ControlReceiver {
   public value: number;
 
   constructor(
@@ -330,7 +343,7 @@ export class Knob extends Control {
   }
 }
 
-export class NetPanel extends Control {
+export class NetPanel extends ControlReceiver {
   public spec: Specs.NetPanelSpec;
 
   constructor(
@@ -342,10 +355,10 @@ export class NetPanel extends Control {
     for(let id in controls) {
       controlSpecs[id] = controls[id].spec;
     }
-    this.spec = {
-      ...spec,
+    this.spec = new Specs.NetPanelSpec(
+      spec.baseArgs,
       controlSpecs,
-    }
+    )
   }
 
   handleMessage(_payload: any) {

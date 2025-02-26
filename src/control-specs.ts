@@ -12,7 +12,9 @@ export class BaseArgs {
 }
 
 export class ControlSpec {
-  public type: string = ''
+  static type = ''
+  public type = ControlSpec.type
+
   public name: string
   public x: number
   public y: number
@@ -20,7 +22,7 @@ export class ControlSpec {
   public height: number
   public color: string
   constructor(
-    baseArgs: BaseArgs,
+    public baseArgs: BaseArgs,
   ) {
     this.name = baseArgs.name
     this.x = baseArgs.x
@@ -32,30 +34,38 @@ export class ControlSpec {
 }
 
 export type GroupStyle = 'framed' | 'logical' | 'page';
+
+// this control is special as it contains other controls
 export class GroupSpecWithoutControls extends ControlSpec {
-  // this control is special as it contains other controls
+  static type = 'group-without-controls'
+  public type = GroupSpecWithoutControls.type
+
   constructor(
     baseArgs: BaseArgs,
     public style: GroupStyle = 'framed',
   ) {
     super(baseArgs);
-    this.type = 'group';
   }
 }
 
+// this control is special as it contains other controls
 export class GroupSpec extends ControlSpec {
-  // this control is special as it contains other controls
+  static type = 'group'
+  public type = GroupSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public controlSpecs: ControlSpecsDict, 
     public style?: GroupStyle,
   ) {
     super(baseArgs);
-    this.type = 'group';
   }
 }
 
 export class FaderSpec extends ControlSpec {
+  static type = 'fader'
+  public type = FaderSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public initialValue: number,
@@ -64,71 +74,85 @@ export class FaderSpec extends ControlSpec {
     public decimalPlaces: number,
   ) { 
     super(baseArgs);
-    this.type = 'fader';
   }
 
 }
 
 export class PadSpec extends ControlSpec {
+  static type = 'pad'
+  public type = PadSpec.type
+
   constructor(
     baseArgs: BaseArgs,
   ) {
     super(baseArgs);
-    this.type = 'pad';
   }
 }
 
 export class SwitchSpec extends ControlSpec {
+  static type = 'switch'
+  public type = SwitchSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public initiallyOn: boolean = false
   ) {
     super(baseArgs);
-    this.type = 'switch';
   }
 }
 
 export class SelectorSpec extends ControlSpec {
+  static type = 'selector'
+  public type = SelectorSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public options: string[],
     public initialIndex: number,
   ) {
     super(baseArgs);
-    this.type = 'selector';
   }
 }
 
 export class ConfirmButtonSpec extends ControlSpec {
+  static type = 'confirm-button'
+  public type = ConfirmButtonSpec.type
+
   constructor(
     baseArgs: BaseArgs,
   ) {
     super(baseArgs);
-    this.type = 'confirm-button';
   }
 }
 
 export class LabelSpec extends ControlSpec {
+  static type = 'label'
+  public type = LabelSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public labelPosition: 'top' | 'center' | 'bottom',
   ) {
     super(baseArgs);
-    this.type = 'label';
   }
 }
 
 export class ConfirmSwitchSpec extends ControlSpec {
+  static type = 'confirm-switch'
+  public type = ConfirmSwitchSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public initiallyOn: boolean = false
   ) {
     super(baseArgs);
-    this.type = 'confirm-switch';
   }
 }
 
 export class CakeSpec extends ControlSpec {
+  static type = 'cake'
+  public type = CakeSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public min: number, 
@@ -137,22 +161,25 @@ export class CakeSpec extends ControlSpec {
     public decimalPlaces: number,
   ) { 
     super(baseArgs);
-    this.type = 'cake';
   }
 }
 
 export class PresetButtonSpec extends ControlSpec {
-	constructor(
+  static type = 'preset-button'
+  public type = PresetButtonSpec.type
+
+  constructor(
     baseArgs: BaseArgs,
-		public stencil: any,
-	) {
+    public stencil: any,
+  ) {
 		super(baseArgs);
-    this.type = 'preset-button';
 	}
 }
 
 export class TabbedPagesSpecWithoutControls extends ControlSpec {
-  // this control is special as it contains other controls
+  static type = 'tabbed-pages-without-controls'
+  public type = TabbedPagesSpecWithoutControls.type
+
   constructor(
     baseArgs: BaseArgs,
     public columns: number = 100, 
@@ -160,12 +187,13 @@ export class TabbedPagesSpecWithoutControls extends ControlSpec {
     public initialPageIndex: number = 0,
   ) {
     super(baseArgs);
-    this.type = 'tabbed-pages';
   }
 }
 
 export class TabbedPagesSpec extends ControlSpec {
-  // this control is special as it contains other controls
+  static type = 'tabbed-pages'
+  public type = TabbedPagesSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public columns: number, 
@@ -174,32 +202,38 @@ export class TabbedPagesSpec extends ControlSpec {
     public initialPageIndex: number,
   ) {
     super(baseArgs);
-    this.type = 'tabbed-pages';
   }
 }
 
 export class LetterboxSpec extends ControlSpec {
-	constructor(
+  static type = 'letterbox'
+  public type = LetterboxSpec.type
+
+  constructor(
     baseArgs: BaseArgs,
-	) {
+  ) {
 		super(baseArgs);
-    this.type = 'letterbox';
 	}
 }
 
 export class TextboxSpec extends ControlSpec {
-	constructor(
+  static type = 'textbox'
+  public type = TextboxSpec.type
+
+  constructor(
     baseArgs: BaseArgs,
 		public initialText: string,
 	) {
 		super(baseArgs);
-    this.type = 'textbox';
 	}
 }
 
 export type Dot = [number, number]
 
 export class DotsSpec extends ControlSpec {
+  static type = 'dots'
+  public type = DotsSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public initialValues: Dot[],
@@ -208,11 +242,13 @@ export class DotsSpec extends ControlSpec {
 //    public displayStyle: 'curve' | 'polygon',
   ) {
     super(baseArgs);
-    this.type = 'dots';
   }
 }
 
 export class KnobSpec extends ControlSpec {
+  static type = 'knob'
+  public type = KnobSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public initialValue: number,
@@ -221,25 +257,28 @@ export class KnobSpec extends ControlSpec {
     public decimalPlaces: number,
   ) {
     super(baseArgs);
-    this.type = 'knob';
   }
 }
 
 export class NetPanelSpecWithoutControls extends ControlSpec {
+  static type = 'net-panel-without-controls'
+  public type = NetPanelSpecWithoutControls.type
+
   constructor(
     baseArgs: BaseArgs,
   ) {
     super(baseArgs);
-    this.type = 'net-panel';
   }
 }
 
 export class NetPanelSpec extends ControlSpec {
+  static type = 'net-panel'
+  public type = NetPanelSpec.type
+
   constructor(
     baseArgs: BaseArgs,
     public controlSpecs: ControlSpecsDict,
   ) {
     super(baseArgs);
-    this.type = 'net-panel';
   }
 }

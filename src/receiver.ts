@@ -1,11 +1,9 @@
-import { ControlSpec } from './control-specs'; 
+import * as Specs from './control-specs'; 
 import * as Messages from './messages'
 
-import { ControlsDict, Control, Group, TabbedPages, NetPanel } from './controls'
+import { type ControlsDict, ControlReceiver, Group, TabbedPages, NetPanel } from './receivers'
 
 export class Receiver {
-  private id = -1;
-
   constructor(
     private name: string,
     private controls: ControlsDict, 
@@ -31,27 +29,34 @@ export class Receiver {
     for(let id in controls) {
       const control = controls[id];
       const controlId = path.concat(id);
-      if(control.spec.type === 'group') {
+      if(control.spec.type === Specs.GroupSpec.type) {
         const group = control as Group;
         this.setupListeners(group.controls, controlId);
-      } else {
-        control.addListener((payload) => {
-					this.send(
-						new Messages.MeterMessage(controlId, payload),
-					);
-        })
-      }
+      } else if(control.spec.type === Specs.NetPanelSpec.type) {
+        const netPanel = control as NetPanel;
+        this.setupListeners(netPanel.controls, controlId);
+      } else if(control.spec.type === Specs.TabbedPagesSpec.type) {
+        const tabbedPages = control as TabbedPages;
+        for(let pageId in tabbedPages.pages) {
+          this.setupListeners(tabbedPages.pages[pageId], controlId.concat(pageId));
+        }
+      } 
+      control.setListener((payload) => {
+        this.send(
+          new Messages.ControlUpdate(controlId, payload),
+        );
+      })
     }
   }
 
   announce() {
-		const controlSpecs: {[id: string]: ControlSpec} = {}
+		const controlSpecs: {[id: string]: Specs.ControlSpec} = {}
 		for(let id in this.controls) {
 			controlSpecs[id] = this.controls[id].spec;
 		}
     console.log('announcing', this.name, controlSpecs)
 		this.send(
-      new Messages.AnnounceReceiver(this.name, controlSpecs)
+      new Messages.ControllerSpecification(this.name, controlSpecs)
 		);
   }
 
@@ -59,19 +64,19 @@ export class Receiver {
     window.addEventListener('message', (event) => {
 			const data = event.data;
 			const type = data.type;
-			if(type === 'nudge') {
+			if(type === Messages.Nudge.type) {
 				this.announce()
-			} else if(type === 'control-message') {
-				const msg = data as Messages.ControlMessage;
+			} else if(type === Messages.ControlSignal.type) {
+				const msg = data as Messages.ControlSignal;
 				const control = this.getControl(this.controls, msg.controlId);
 				if(control) {
 					control.handleMessage(msg.payload);
 				}
-			}
+			} 
     });
   }
 
-  getControl(controls: ControlsDict, id: string[]): Control | undefined {
+  getControl(controls: ControlsDict, id: string[]): ControlReceiver | undefined {
     if(id.length > 1) {
       const node = controls[id[0]];
       if(node instanceof Group) {
