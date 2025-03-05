@@ -1,4 +1,7 @@
 export * as Messages from './messages';
-export * as Specs from './control-specs';
-export * as Receivers from './receivers';
+export * as Controls from './controls';
+
+export * as Errors from './error';
 export * from './receiver';
+export * from './common';
+export * as Adapters from './adapters';

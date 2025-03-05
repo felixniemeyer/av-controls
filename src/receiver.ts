@@ -1,100 +1,122 @@
-import * as Specs from './control-specs'; 
-import * as Messages from './messages'
+import * as Messages from './messages';
+import { Logger } from './error';
+import { ControlContainer, type CommunicationAdapter, type ReceiversDict } from './common';
 
-import { type ControlsDict, ControlReceiver, Group, TabbedPages, NetPanel } from './receivers'
+import { WindowCommunicationAdapter } from './adapters';
 
+/**
+ * Main receiver class for handling control communication
+ */
 export class Receiver {
+  private communicationAdapter: CommunicationAdapter;
+  
   constructor(
     private name: string,
-    private controls: ControlsDict, 
-    private controllerTab: Window = window.opener || window.parent,
+    private receivers: ReceiversDict, 
+    communicationTarget: Window | CommunicationAdapter = 
+      typeof window !== 'undefined' ? (window.opener || window.parent) : null,
   ) {
-    this.listen();
-    this.setupListeners(controls, []); 
+    // Set up communication
+    if (communicationTarget instanceof Window) {
+      this.communicationAdapter = new WindowCommunicationAdapter(communicationTarget)
+    } else {
+      this.communicationAdapter = communicationTarget
+    }
+    
+    // Set up event handlers
+    this.setupCommunication();
+    this.setupControlListeners(); 
+    
+    // Send initial ready message
     this.send(new Messages.Ready());
-    window.addEventListener('beforeunload', () => {
-      this.sendTabClosing();
-    })
-  }
-
-  send(message: any) {
-  	this.controllerTab.postMessage({
-				protocol: 'av-controls',
-				...message
-			}, '*'
-		);
-  }
-
-  setupListeners(controls: ControlsDict, path: string[]) {
-    for(let id in controls) {
-      const control = controls[id];
-      const controlId = path.concat(id);
-      if(control.spec.type === Specs.GroupSpec.type) {
-        const group = control as Group;
-        this.setupListeners(group.controls, controlId);
-      } else if(control.spec.type === Specs.NetPanelSpec.type) {
-        const netPanel = control as NetPanel;
-        this.setupListeners(netPanel.controls, controlId);
-      } else if(control.spec.type === Specs.TabbedPagesSpec.type) {
-        const tabbedPages = control as TabbedPages;
-        for(let pageId in tabbedPages.pages) {
-          this.setupListeners(tabbedPages.pages[pageId], controlId.concat(pageId));
-        }
-      } 
-      control.setListener((payload) => {
-        this.send(
-          new Messages.ControlUpdate(controlId, payload),
-        );
-      })
+    
+    // Set up tab closing handler
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        this.sendTabClosing();
+      });
     }
   }
 
-  announce() {
-		const controlSpecs: {[id: string]: Specs.ControlSpec} = {}
-		for(let id in this.controls) {
-			controlSpecs[id] = this.controls[id].spec;
-		}
-    console.log('announcing', this.name, controlSpecs)
-		this.send(
-      new Messages.ControllerSpecification(this.name, controlSpecs)
-		);
+  /**
+   * Send a message to the controller
+   */
+  send(message: Messages.Message): void {
+    this.communicationAdapter.send(message);
   }
 
-  listen() {
-    window.addEventListener('message', (event) => {
-			const data = event.data;
-			const type = data.type;
-			if(type === Messages.Nudge.type) {
-				this.announce()
-			} else if(type === Messages.ControlSignal.type) {
-				const msg = data as Messages.ControlSignal;
-				const control = this.getControl(this.controls, msg.controlId);
-				if(control) {
-					control.handleMessage(msg.payload);
-				}
-			} 
+  /**
+   * Set up listeners for all controls recursively
+   */
+  private setupControlListeners(): void {
+    ControlContainer.walkReceivers(this.receivers, (control, path) => {
+      control.setListener((payload) => {
+        this.send(new Messages.ControlUpdate(path, payload));
+      });
     });
   }
 
-  getControl(controls: ControlsDict, id: string[]): ControlReceiver | undefined {
-    if(id.length > 1) {
-      const node = controls[id[0]];
-      if(node instanceof Group) {
-				return this.getControl(node.controls, id.slice(1))
-			} else if (node instanceof TabbedPages) {
-				return this.getControl(node.pages[id[1]], id.slice(2))
-			} else if (node instanceof NetPanel) {
-				return this.getControl(node.controls, id.slice(1))
-			}
-    } else {
-      return controls[id[0]];
-    }
-    return undefined
+  /**
+   * Announce the controller specification
+   */
+  announce(): void {
+    const controlSpecs = ControlContainer.getSpecs(this.receivers);
+    
+    Logger.debug('Announcing controller', { name: this.name, specs: controlSpecs });
+    this.send(new Messages.ControllerSpecification(this.name, controlSpecs));
   }
 
-  sendTabClosing() {
-		this.send(
-			new Messages.TabClosing()
-		);
+  /**
+   * Set up communication with the controller
+   */
+  private setupCommunication(): void {
+    this.communicationAdapter.setListener((data) => {
+      if (Messages.isNudge(data)) {
+        this.announce();
+      } else if (Messages.isControlSignal(data)) {
+        this.handleControlSignal(data);
+      }
+    });
+  }
+  
+  /**
+   * Handle an incoming control signal
+   */
+  private handleControlSignal(msg: Messages.ControlSignal): void {
+    const control = ControlContainer.getReceiverByPath(this.receivers, msg.controlId);
+    
+    if (control) {
+      try {
+        control.handleSignal(msg.payload);
+      } catch (error) {
+        Logger.error('Error handling control signal', { 
+          error, 
+          controlId: msg.controlId,
+          payload: msg.payload 
+        });
+      }
+    } else {
+      Logger.warn('Control not found', { controlId: msg.controlId.join('.') });
+    }
+  }
+
+  /**
+   * Send a tab closing message to the controller
+   */
+  sendTabClosing(): void {
+    try {
+      this.send(new Messages.TabClosing());
+    } catch (error) {
+      Logger.warn('Failed to send tab closing message', { error });
+    }
+  }
+  
+  /**
+   * Clean up resources when no longer needed
+   */
+  dispose(): void {
+    if (this.communicationAdapter.dispose) {
+      this.communicationAdapter.dispose();
+    }
   }
 }
