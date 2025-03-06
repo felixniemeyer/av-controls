@@ -2,7 +2,7 @@
  * WebSocket communication adapter for AV Controls
  */
 
-import { type CommunicationAdapter } from '../common';
+import { CommunicationAdapter } from './base';
 import { CommunicationError, Logger } from '../error';
 import type { Message } from '../messages';
 
@@ -217,7 +217,7 @@ export class WebSocketAdapter implements CommunicationAdapter {
   /**
    * Register a message listener
    */
-  setListener(listener: (message: any) => void): void {
+  addListener(listener: (message: any) => void): void {
     this.listener = listener;
   }
   

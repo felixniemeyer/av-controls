@@ -36,8 +36,7 @@ export class Receiver extends Base.Receiver {
     super();
   }
 
-  handleSignal(signal: Update): void {
-    // PresetButton doesn't handle incoming messages directly
+  handleSignal(_signal: Base.Signal): void {
     Logger.debug('PresetButton received message, ignoring', { button: this.spec.name });
   }
 

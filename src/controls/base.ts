@@ -2,16 +2,16 @@ import { Mapping } from '../common'
 
 // updates go from visuals to controller
 export class Update {
-    static tryFromAny(_any: any): Update | undefined {
-        return new Update();
-    }
+  static tryFromAny(object: any): Update {
+    return object as Update;
+  }
 }
 
 // signals go from controller to visuals
 export class Signal {
-    static tryFromAny(_any: any): Signal | undefined {
-        return new Signal();
-    }
+  static tryFromAny(object: any): Signal {
+    return object as Signal;
+  }
 }
 
 export class Args {

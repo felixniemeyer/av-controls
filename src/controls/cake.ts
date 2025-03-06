@@ -34,19 +34,26 @@ export class Spec extends Base.Spec {
  * Cake control receiver (display-only)
  */
 export class Receiver extends Base.Receiver {
+  private lastUpdateTime: number = 0;
+
   constructor(
     public spec: Spec,
+    private throttle = 2000,
   ) {
     super();
   }
 
-  handleSignal(signal: Update): void {
+  handleSignal(_signal: Base.Signal): void {
     // Cake doesn't handle incoming messages
     Logger.debug('Cake received message, ignoring', { cake: this.spec.name });
   }
 
   sendValue(value: number): void {
-    this.sendUpdate(new Update(value));
+    const now = Date.now();
+    if (now - this.lastUpdateTime > this.throttle) {
+      this.lastUpdateTime = now;
+      this.sendUpdate(new Update(value));
+    }
   }
 }
 

@@ -4,7 +4,7 @@ import { Logger } from '../error';
 
 export class Update extends Base.Update {
   constructor(
-    public payload: any,
+    public payload: Base.Update,
     public id: ControlId,
   ) {
     super();
@@ -66,14 +66,14 @@ export class Receiver extends Base.Receiver {
 export class Sender extends Base.Sender {
   constructor(
     public spec: Spec,
-    private onUpdate: (payload: any, id: ControlId) => void,
+    private onUpdate: (update: Update) => void,
   ) {
     super()
   }
 
   update(update: Update) {
     if(update.id.length > 0) {
-      this.onUpdate(update.payload, update.id)
+      this.onUpdate(new Update(update.payload, update.id))
     } 
   }
 

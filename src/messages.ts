@@ -5,18 +5,9 @@ import { Base } from './controls';
 
 import type { ControlId } from './common';
 
-// Define message types as a union of literals
-export type MessageType = 
-  | 'ready'
-  | 'nudge'
-  | 'controller-specification'
-  | 'control-signal'
-  | 'control-update'
-  | 'tab-closing';
-
 // Base interface for all messages
 export interface Message {
-  type: MessageType;
+  type: string;
   protocol?: string;
 }
 
@@ -67,50 +58,12 @@ export class ControlUpdate implements Message {
   ) {}
 }
 
-export class TabClosing implements Message {
-  static type = 'tab-closing' as const;
-  type = TabClosing.type;
+export class TabClosed implements Message {
+  static type = 'tab-closed' as const;
+  type = TabClosed.type;
 }
 
-// Type guard functions to check message types
-export function isControlSignal(message: unknown): message is ControlSignal {
-  return message !== null && 
-    typeof message === 'object' && 
-    'type' in message && 
-    message.type === ControlSignal.type;
-}
-
-export function isControlUpdate(message: unknown): message is ControlUpdate {
-  return message !== null && 
-    typeof message === 'object' && 
-    'type' in message && 
-    message.type === ControlUpdate.type;
-}
-
-export function isReady(message: unknown): message is Ready {
-  return message !== null && 
-    typeof message === 'object' && 
-    'type' in message && 
-    message.type === Ready.type;
-}
-
-export function isNudge(message: unknown): message is Nudge {
-  return message !== null && 
-    typeof message === 'object' && 
-    'type' in message && 
-    message.type === Nudge.type;
-}
-
-export function isControllerSpecification(message: unknown): message is ControllerSpecification {
-  return message !== null && 
-    typeof message === 'object' && 
-    'type' in message && 
-    message.type === ControllerSpecification.type;
-}
-
-export function isTabClosing(message: unknown): message is TabClosing {
-  return message !== null && 
-    typeof message === 'object' && 
-    'type' in message && 
-    message.type === TabClosing.type;
+export class CloseTab implements Message {
+  static type = 'close-tab' as const;
+  type = CloseTab.type;
 }

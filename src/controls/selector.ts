@@ -32,7 +32,7 @@ export class Spec extends Base.Spec {
 /**
  * Selector control receiver
  */
-export class Selector extends Base.Receiver {
+export class Receiver extends Base.Receiver {
   public index: number;
   
   constructor(

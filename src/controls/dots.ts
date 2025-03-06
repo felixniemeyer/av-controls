@@ -44,8 +44,8 @@ export class Spec extends Base.Spec {
   constructor(
     baseArgs: Base.Args,
     public initialValues: Dot[],
-    public ensureXOrder: boolean = true,
-    public ensureYOrder: boolean = false,
+    public xPadding = 0.01,
+    public yPadding = -1,
 //    public displayStyle: 'curve' | 'polygon',
   ) {
     super(baseArgs);
