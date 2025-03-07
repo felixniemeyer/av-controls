@@ -51,6 +51,14 @@ export class Receiver extends Base.Receiver {
   }
 }
 
+export class State extends Base.State {
+  constructor(
+    public text: string,
+  ) {
+    super();
+  }
+}
+
 export class Sender extends Base.Sender {
   public text: string = ''
 
@@ -62,7 +70,14 @@ export class Sender extends Base.Sender {
   }
 
   send() {
-    this.onControl(this.text)
+    this.onSignal(new Signal(this.text))
+  }
+
+  getState() {
+    return new State(this.text)
+  }
+
+  setState(state: State) {
+    this.text = state.text
   }
 }
-

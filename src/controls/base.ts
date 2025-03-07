@@ -2,16 +2,10 @@ import { Mapping } from '../common'
 
 // updates go from visuals to controller
 export class Update {
-  static tryFromAny(object: any): Update {
-    return object as Update;
-  }
 }
 
 // signals go from controller to visuals
 export class Signal {
-  static tryFromAny(object: any): Signal {
-    return object as Signal;
-  }
 }
 
 export class Args {
@@ -47,41 +41,35 @@ export class Spec {
   }
 }
 
-export type Listener = (payload: Signal) => void;
+type OnUpdateCallback = (payload: Update) => void
+type OnSignalCallback = (payload: Signal) => void
+type OnTouchCallback = () => void
 
 export abstract class Receiver {
-  abstract handleSignal(payload: Signal): void;
   abstract spec: Spec;
 
-  private listeners: Listener[] = [];
+  public onUpdate: OnUpdateCallback = () => {}
 
-  public setListener(listener: Listener): void {
-    this.listeners.push(listener);
-  }
-
-  protected sendUpdate(payload: Update): void {
-    for (const listener of this.listeners) {
-      listener(payload);
-    }
+  handleSignal(_payload: Signal): void {
   }
 }
 
-type OnControlCallback = (payload: Signal) => void
-type OnTouchCallback = () => void
 
 export type TraversalCallback = (sender: Sender, object: any) => void
+export type DeepForeachCallback = (sender: Sender) => void
 
 export class State {
 }
-
 
 export abstract class Sender {
   public abstract spec: Spec
 
   public mappings: Mapping[] = []
 
-  public onControl: OnControlCallback = () => {}
+  public onSignal: OnSignalCallback = () => {}
   public onTouch: OnTouchCallback = () => {}
+
+  public parent?: Sender
 
   constructor(
   ) { }
@@ -98,17 +86,21 @@ export abstract class Sender {
     this.mappings = []
   }
 
-  update(_update: Update) {
+  handleUpdate(_update: Update) {
   }
 
-  getState() : State {
+  getState() {
     return new State()
   }
 
-  setState(_state: State) {
+  setState(_state: State): void {
   }
 
   traverse(callback: TraversalCallback, object: any) {
     callback(this, object)
+  }
+
+  deepForeach(callback: DeepForeachCallback) {
+    callback(this)
   }
 }

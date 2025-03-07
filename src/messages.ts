@@ -1,9 +1,5 @@
-import type { SpecsDict } from './common';
-import packageJson from '../package.json'; 
-
 import { Base } from './controls';
-
-import type { ControlId } from './common';
+import packageJson from '../package.json'; 
 
 // Base interface for all messages
 export interface Message {
@@ -25,14 +21,14 @@ export class Nudge implements Message {
   constructor() {}
 }
 
-export class ControllerSpecification implements Message {
+export class RootSpecification implements Message {
   static type = 'controller-specification' as const;
-  type = ControllerSpecification.type;
+  type = RootSpecification.type;
   version = packageJson.version;
 
   constructor(
     public name: string,
-    public controlSpecs: SpecsDict,
+    public rootControlSpec: Base.Spec,
   ) {}
 }
 
@@ -42,8 +38,7 @@ export class ControlSignal implements Message {
   type = ControlSignal.type;
 
   constructor(
-    public controlId: ControlId,
-    public payload: Base.Signal,
+    public signal: Base.Signal,
   ) {}
 }
 
@@ -53,8 +48,7 @@ export class ControlUpdate implements Message {
   type = ControlUpdate.type;
 
   constructor(
-    public controlId: ControlId,
-    public payload: Base.Update,
+    public update: Base.Update,
   ) {}
 }
 
@@ -66,4 +60,9 @@ export class TabClosed implements Message {
 export class CloseTab implements Message {
   static type = 'close-tab' as const;
   type = CloseTab.type;
+}
+
+export class Test implements Message {
+  static type = 'test' as const;
+  type = Test.type;
 }

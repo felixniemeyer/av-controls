@@ -74,7 +74,7 @@ export class Sender extends Base.Sender {
     if(this.awaitingConfirmation) {
       this.awaitingConfirmation = false
       this.on = !this.on
-      this.onControl(this.on)
+      this.onSignal(new Signal(this.on))
     } else {
       this.awaitingConfirmation = true
       this.defuseTimer = setTimeout(() => {
@@ -93,5 +93,6 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.on = state.on
+    this.onSignal(new Signal(this.on))
   }
 }

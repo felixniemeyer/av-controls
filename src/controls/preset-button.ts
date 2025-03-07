@@ -1,19 +1,11 @@
 import * as Base from './base';
 import { Logger } from '../error';
-import { type SendersDict } from '../common';
 
 export class Update extends Base.Update {
   constructor(
     public action: 'random' | 'next'
   ) {
     super();
-  }
-  static tryFromPayload(payload: any) : Update | undefined {
-    if(payload.action == 'random') {
-      return new Update('random')
-    } else if(payload.action == 'next') {
-      return new Update('next')
-    }
   }
 }
 
@@ -41,14 +33,12 @@ export class Receiver extends Base.Receiver {
   }
 
   makeRandomSwitch(): void {
-    this.sendUpdate(new Update('random'));
+    this.onUpdate(new Update('random'));
   }
 }
 
-type Preset = {[id: string]: Base.State}
-
 export class Sender extends Base.Sender {
-  private presets: {[id: string]: Preset} = {}
+  private savedParentStates: {[id: string]: Base.State} = {}
 
   private lastPresetLoaded: string | undefined
 
@@ -58,50 +48,47 @@ export class Sender extends Base.Sender {
 
   constructor(
     public spec: Spec,
-    private controls: SendersDict
   ) {
     super()
   }
   
-  update(payload: any) {
-    if(payload.action == 'next') {
+  handleUpdate(update: Update) {
+    console.log('update arrived at ', update)
+    if(update.action == 'next') {
       this.nextPresetInRow()
-    } else if(payload.action == 'random') {
+    } else if(update.action == 'random') {
       this.randomPreset()
     }
   }
 
   save(presetId: string) {
-    const preset: Preset = {}
-    for(let key in this.controls) {
-      preset[key] = this.controls[key].getState()
+    if(this.parent) {
+      const state = this.parent.getState()
+      console.log(`saving preset ${presetId}`, state)
+      this.savedParentStates[presetId] = state
     }
-    this.presets[presetId] = preset
   }
 
   load(presetId: string) {
-    const preset = this.presets[presetId]
-    if(preset !== undefined) {
-      for(let key in preset) {
-        this.controls[key].setState(preset[key])
-      }
+    if(this.parent) {
+      this.parent.setState(this.savedParentStates[presetId])
     }
   }
 
   getAllPresets() {
-    return this.presets
+    return this.savedParentStates
   }
 
-  setPresets(presets: {[id: string]: Preset}) {
-    this.presets = presets
+  setPresets(presets: {[id: string]: Base.State}) {
+    this.savedParentStates = presets
   }
 
   deletePreset(presetId: string) {
-    delete this.presets[presetId]
+    delete this.savedParentStates[presetId]
   }
 
   nextPresetInRow() {
-    const presetIds = Object.keys(this.presets)
+    const presetIds = Object.keys(this.savedParentStates)
     if(presetIds.length > 0) {
       let i = 0
       if(this.lastPresetLoaded !== undefined) {
@@ -113,7 +100,7 @@ export class Sender extends Base.Sender {
   }
 
   randomPreset() {
-    const presetIds = Object.keys(this.presets)
+    const presetIds = Object.keys(this.savedParentStates)
     if(presetIds.length > 0) {
       let i 
       if(this.lastPresetLoaded !== undefined) { 
@@ -131,6 +118,6 @@ export class Sender extends Base.Sender {
   }
 
   getNames() {
-    return Object.keys(this.presets)
+    return Object.keys(this.savedParentStates)
   }
 }

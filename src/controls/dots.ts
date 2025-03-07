@@ -101,7 +101,7 @@ export class Sender extends Base.Sender {
 
   moveDot(index: number, value: Dot) {
     this.values[index] = value
-    this.onControl(new Signal('single', {index, dot: value}))
+    this.onSignal(new Signal('single', {index, dot: value}))
   }
 
   getState() {
@@ -110,7 +110,7 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.values = state.values 
-    this.onControl(new Signal('full', this.deproxy()))
+    this.onSignal(new Signal('full', this.deproxy()))
   }
 
   deproxy() {

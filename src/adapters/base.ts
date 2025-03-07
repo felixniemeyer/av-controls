@@ -1,4 +1,4 @@
-import { Message } from '../messages';
+import { type Message } from '../messages';
 
 /**
  * Communication adapter interface for different transport methods

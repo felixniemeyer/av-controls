@@ -1,18 +1,10 @@
 import * as Base from './base';
-import { UpdateParsingError } from '../error';
 
 export class Signal extends Base.Signal {
     constructor(
         public index: number,
     ) {
         super();
-    }
-    static tryFromAny(payload: any): Signal {
-        const index = payload.index;
-        if (typeof index !== 'number') {
-            throw new UpdateParsingError(`index must be a number, got ${index}`);
-        }
-        return new Signal(index);
     }
 }
 
@@ -71,7 +63,7 @@ export class Sender extends Base.Sender {
 
   select(value: number) {
     this.index = value
-    this.onControl(value)
+    this.onSignal(new Signal(value))
   }
 
   increment() {

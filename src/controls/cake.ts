@@ -1,4 +1,4 @@
-import { Logger, UpdateParsingError } from '../error';
+import { UpdateParsingError } from '../error';
 import * as Base from './base';
 
 export class Update extends Base.Update {
@@ -34,26 +34,14 @@ export class Spec extends Base.Spec {
  * Cake control receiver (display-only)
  */
 export class Receiver extends Base.Receiver {
-  private lastUpdateTime: number = 0;
-
   constructor(
     public spec: Spec,
-    private throttle = 2000,
   ) {
     super();
   }
 
-  handleSignal(_signal: Base.Signal): void {
-    // Cake doesn't handle incoming messages
-    Logger.debug('Cake received message, ignoring', { cake: this.spec.name });
-  }
-
   sendValue(value: number): void {
-    const now = Date.now();
-    if (now - this.lastUpdateTime > this.throttle) {
-      this.lastUpdateTime = now;
-      this.sendUpdate(new Update(value));
-    }
+    this.onUpdate(new Update(value));
   }
 }
 
@@ -67,7 +55,7 @@ export class Sender extends Base.Sender {
     this.value = spec.initialValue
   }
 
-  update(payload: Update) {
+  handleUpdate(payload: Update) {
     this.value = payload.value
   }
 }

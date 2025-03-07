@@ -68,7 +68,7 @@ export class Sender extends Base.Sender {
 
   toggle() {
     this.on = !this.on
-    this.onControl(this.on)
+    this.onSignal(new Signal(this.on))
   }
 
   getState() {
@@ -77,5 +77,6 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.on = state.on
+    this.onSignal(new Signal(this.on))
   }
 }

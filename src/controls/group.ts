@@ -1,31 +1,13 @@
-import { Logger } from "../error";
 import * as Base from './base';
-import { UpdateParsingError } from '../error';
 
-import { type SpecsDict, type ReceiversDict, type SendersDict } from "../common";
-
-export type GroupStyle = 'framed' | 'logical' | 'page';
+import { type SpecsDict, type ReceiversDict, type SendersDict, createSenderFromSpec } from "../common";
 
 export class Update extends Base.Update {
     constructor(
-        public childControlId: string,
+        public controlId: string,
         public update: Base.Update,
     ) {
         super();
-    }
-    static tryFromAny(payload: any): Update {
-        const childControlId = payload.childControlId
-        if(typeof childControlId !== 'string') {
-            throw new UpdateParsingError(`childControlId must be a string, got ${childControlId}`)
-        }
-        const childUpdate = Base.Update.tryFromAny(payload.update);
-        if(!childUpdate) {
-            throw new UpdateParsingError(`childUpdate must be an Update, got ${payload.update}`)
-        }
-        return new Update(
-            childControlId,
-            childUpdate,
-        );
     }
 }
 
@@ -45,7 +27,6 @@ export class SpecWithoutControls extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public style: GroupStyle = 'framed',
   ) {
     super(baseArgs);
   }
@@ -59,7 +40,6 @@ export class Spec extends Base.Spec {
   constructor(
     baseArgs: Base.Args,
     public controlSpecs: SpecsDict, 
-    public style?: GroupStyle,
   ) {
     super(baseArgs);
   }
@@ -79,17 +59,27 @@ export class Receiver extends Base.Receiver {
     super();
     const controlSpecs: SpecsDict = {};
     for (const id in controls) {
-      controlSpecs[id] = controls[id].spec;
+      const control = controls[id]
+      controlSpecs[id] = control.spec;
+      control.onUpdate = (update: Base.Update) => {
+        this.onUpdate(new Update(id, update))
+      }
     }
-    this.spec = new Spec(
+    this.spec = this.makeSpec(spec, controlSpecs);
+  }
+
+  makeSpec(spec: SpecWithoutControls, controlSpecs: SpecsDict) {
+    return new Spec(
       spec.baseArgs,
       controlSpecs,
-      spec.style
     );
   }
 
-  handleSignal(_payload: Base.Signal): void {
-    Logger.debug('Group received message, ignoring', { group: this.spec.name });
+  addControlSpecsToSpec(_baseArgs: Base.Args, _controlSpecs: SpecsDict) {
+  }
+
+  handleSignal(signal: Signal): void {
+    this.controls[signal.controlId].handleSignal(signal.signal);
   }
 }
 
@@ -104,17 +94,25 @@ export class State extends Base.State {
 }
 
 export class Sender extends Base.Sender {
+  public senders: SendersDict
+
   constructor(
     public spec: Spec,
-    public senders: SendersDict,
   ) {
     super()
+    this.senders = {}
+    for(const id in spec.controlSpecs) {
+      const sender = createSenderFromSpec(spec.controlSpecs[id])
+      this.senders[id] = sender
+      sender.onSignal = (signal: Base.Signal) => {
+        this.onSignal(new Signal(id, signal))
+      }
+      sender.parent = this
+    }
   }
 
-  update(update: Update) {
-    if(update.childControlId) {
-      this.senders[update.childControlId].update(update.update)
-    } 
+  handleUpdate(update: Update) {
+    this.senders[update.controlId].handleUpdate(update.update)
   }
 
   getState() {
@@ -133,11 +131,18 @@ export class Sender extends Base.Sender {
 
   traverse(callback: Base.TraversalCallback, object: any) {
     const nodeObject = object.self = object.self || {}
+    const children = object.children = object.children || {}
     callback(this, nodeObject)
     for (const id in this.senders) {
-      const subObject = object.children[id] = object.children[id] || {}
+      const subObject = children[id] = children[id] || {}
       this.senders[id].traverse(callback, subObject)
     }
   }
 
+  deepForeach(callback: Base.DeepForeachCallback) {
+    callback(this)
+    for (const id in this.senders) {
+      this.senders[id].deepForeach(callback)
+    }
+  }
 }

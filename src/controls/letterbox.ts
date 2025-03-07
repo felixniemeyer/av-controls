@@ -42,6 +42,14 @@ export class Receiver extends Base.Receiver {
   }
 }
 
+export class State extends Base.State {
+  constructor(
+    public letter: string,
+  ) {
+    super();
+  }
+}
+
 export class Sender extends Base.Sender {
   constructor(
     public spec: Spec, 
@@ -50,6 +58,6 @@ export class Sender extends Base.Sender {
   }
 
   send(message: string) {
-    this.onControl(new Signal(message))
+    this.onSignal(new Signal(message))
   }
 }

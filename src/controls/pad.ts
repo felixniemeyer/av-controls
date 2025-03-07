@@ -1,22 +1,11 @@
 import * as Base from './base';
-import { UpdateParsingError } from '../error'
 
 class Signal extends Base.Signal {
   constructor(
     public pressed: boolean,
-    public velocity: number,
+    public velocity?: number,
   ) {
     super();
-  }
-  static tryFromAny(payload: any): Signal {
-    const pressed = payload.pressed;
-    if (typeof pressed !== 'boolean') {
-      throw new UpdateParsingError(`pressed must be a boolean, got ${pressed}`);
-    }
-    if (typeof payload.velocity !== 'number') {
-      throw new UpdateParsingError(`velocity must be a number, got ${payload.velocity}`);
-    }
-    return new Signal(pressed, payload.velocity);
   }
 }
 
@@ -60,8 +49,6 @@ export class Receiver extends Base.Receiver {
   }
 }
 
-type PadEvent = {press: true, velocity: number} | {press: false}
-
 export class Sender extends Base.Sender {
   pressed: boolean = false
 
@@ -73,11 +60,11 @@ export class Sender extends Base.Sender {
 
   press(v: number) {
     this.pressed = true
-    this.onControl({press: true, velocity: v} as PadEvent)
+    this.onSignal(new Signal(true, v))
   }
 
   release() {
     this.pressed = false
-    this.onControl({press: false} as PadEvent)
+    this.onSignal(new Signal(false))
   }
 }

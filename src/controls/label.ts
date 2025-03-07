@@ -1,5 +1,4 @@
 import * as Base from './base';
-import { Logger } from '../error';
 
 export class Spec extends Base.Spec {
   static type = 'label'
@@ -18,11 +17,6 @@ export class Receiver extends Base.Receiver {
     public spec: Spec,
   ) {
     super();
-  }
-
-  handleSignal(_signal: Base.Signal): void {
-    // Labels don't handle signals
-    Logger.debug('Label received signal, ignoring', { label: this.spec.name });
   }
 }
 

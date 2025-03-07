@@ -69,7 +69,7 @@ export class Sender extends Base.Sender {
 
   setValue(value: number) {
     this.value = value
-    this.onControl(new Signal(value))
+    this.onSignal(new Signal(value))
   }
 
   setNormValue(normValue: number) {
