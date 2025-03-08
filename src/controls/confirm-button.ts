@@ -61,21 +61,13 @@ export class Sender extends Base.Sender {
     super()
   }
 
-  private defuseTimer? : number
   press() {
-    if(this.defuseTimer !== undefined) {
-      clearTimeout(this.defuseTimer)
-      this.defuseTimer = undefined
-    }
     if(this.awaitingConfirmation) {
       this.onSignal(new Signal(true))
       this.awaitingConfirmation = false
     } else {
       this.awaitingConfirmation = true
       this.onSignal(new Signal(false))
-      this.defuseTimer = setTimeout(() => {
-        this.awaitingConfirmation = false
-      }, 4000)
     }
   }
 

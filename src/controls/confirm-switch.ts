@@ -65,21 +65,13 @@ export class Sender extends Base.Sender {
     this.on = spec.initiallyOn
   }
 
-  private defuseTimer? : number
   press() {
-    if(this.defuseTimer !== undefined) {
-      clearTimeout(this.defuseTimer)
-      this.defuseTimer = undefined
-    }
     if(this.awaitingConfirmation) {
       this.awaitingConfirmation = false
       this.on = !this.on
       this.onSignal(new Signal(this.on))
     } else {
       this.awaitingConfirmation = true
-      this.defuseTimer = setTimeout(() => {
-        this.awaitingConfirmation = false
-      }, 4000)
     }
   }
 

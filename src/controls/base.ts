@@ -41,8 +41,8 @@ export class Spec {
   }
 }
 
-type OnUpdateCallback = (payload: Update) => void
-type OnSignalCallback = (payload: Signal) => void
+type OnUpdateCallback = (update: Update) => void
+type OnSignalCallback = (signal: Signal) => void
 type OnTouchCallback = () => void
 
 export abstract class Receiver {
@@ -50,7 +50,7 @@ export abstract class Receiver {
 
   public onUpdate: OnUpdateCallback = () => {}
 
-  handleSignal(_payload: Signal): void {
+  handleSignal(_signal: Signal): void {
   }
 }
 
