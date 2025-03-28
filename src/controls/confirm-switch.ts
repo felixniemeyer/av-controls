@@ -32,17 +32,21 @@ export class Spec extends Base.Spec {
  * Confirm switch control receiver
  */
 export class Receiver extends Base.Receiver {
+  public on: boolean = false
+
   constructor(
     public spec: Spec,
     public onConfirmedSwitch?: (isOn: boolean) => void,
   ) {
     super();
+    this.on = spec.initiallyOn
   }
 
   handleSignal(signal: Signal): void {
     if (this.onConfirmedSwitch) {
       this.onConfirmedSwitch(signal.on);
     }
+    this.on = signal.on
   }
 }
 

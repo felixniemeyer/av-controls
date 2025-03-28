@@ -72,8 +72,10 @@ export class Sender extends BaseSender {
   }
 
   handlePostMessage(event: MessageEvent) {
-    if(event.data.type == Messages.WrappedMessage.type) {
-      this.broadcastAvMessage(event.data.message)
+    if(event.source === this.tab) {
+      if(event.data.type == Messages.WrappedMessage.type) {
+        this.broadcastAvMessage(event.data.message)
+      }
     }
   }
 
