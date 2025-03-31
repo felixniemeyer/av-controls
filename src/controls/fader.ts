@@ -44,11 +44,10 @@ export class Receiver extends Base.Receiver {
   }
 
   handleSignal(payload: Signal): void {
+    this.value = payload.value;
     if (this.onChange) {
       this.onChange(payload.value);
     }
-    
-    this.value = payload.value;
   }
 }
 

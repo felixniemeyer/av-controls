@@ -43,10 +43,10 @@ export class Receiver extends Base.Receiver {
   }
 
   handleSignal(signal: Signal): void {
+    this.on = signal.on
     if (this.onConfirmedSwitch) {
       this.onConfirmedSwitch(signal.on);
     }
-    this.on = signal.on
   }
 }
 

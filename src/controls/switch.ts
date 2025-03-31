@@ -40,11 +40,10 @@ export class Receiver extends Base.Receiver {
   }
 
   handleSignal(payload: Signal): void {
+    this.on = payload.on;
     if (this.onToggle) {
       this.onToggle(payload.on);
     }
-    
-    this.on = payload.on;
   }
 }
 

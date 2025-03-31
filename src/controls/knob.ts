@@ -39,6 +39,7 @@ export class Receiver extends Base.Receiver {
 
   constructor(
     public spec: Spec,
+    public onChange?: (value: number) => void,
   ) {
     super();
     this.value = spec.initialValue;
@@ -46,6 +47,9 @@ export class Receiver extends Base.Receiver {
 
   handleSignal(signal: Signal): void {
     this.value = signal.value;
+    if (this.onChange) {
+      this.onChange(signal.value);
+    }
   }
 }
 

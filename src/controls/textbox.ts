@@ -44,7 +44,6 @@ export class Receiver extends Base.Receiver {
 
   handleSignal(signal: Signal): void {
     this.text = signal.text;
-    
     if (this.onTextChange) {
       this.onTextChange(this.text);
     }

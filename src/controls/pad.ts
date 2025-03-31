@@ -36,15 +36,19 @@ export class Receiver extends Base.Receiver {
 
   handleSignal(payload: Signal): void {
     if (payload.pressed) {
-      if (!this.pressed && this.onPress) {
-        this.onPress(payload.velocity || 1.0);
+      if (!this.pressed ) {
+        this.pressed = true;
+        if(this.onPress) {
+          this.onPress(payload.velocity || 1.0);
+        }
       }
-      this.pressed = true;
     } else {
-      if (this.pressed && this.onRelease) {
-        this.onRelease();
+      if (this.pressed) {
+        this.pressed = false;
+        if(this.onRelease) {
+          this.onRelease();
+        }
       }
-      this.pressed = false;
     }
   }
 }

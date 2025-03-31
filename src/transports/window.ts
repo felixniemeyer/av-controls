@@ -67,6 +67,10 @@ export class Sender extends BaseSender {
     window.addEventListener('message', this.handlePostMessage)
   }
 
+  destroy() {
+    window.removeEventListener('message', this.handlePostMessage)
+  }
+
   send(message: AvControlsMessages.Message): void {
     this.tab.postMessage(new Messages.WrappedMessage(message), '*');
   }

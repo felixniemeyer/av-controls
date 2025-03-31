@@ -36,10 +36,10 @@ export class Receiver extends Base.Receiver {
   }
 
   handleSignal(payload: Signal): void {
+    this.index = payload.index;
     if (this.onSelect) {
       this.onSelect(payload.index);
     }
-    this.index = payload.index;
   }
 }
 
