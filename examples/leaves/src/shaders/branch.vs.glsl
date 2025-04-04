@@ -26,7 +26,7 @@ void main() {
 
     // Apply translation
     uv = position; 
-    // uv.y *= style + 1.; 
+    uv.y *= style + 1.; 
     vec2 pos = position; // Declare pos variable
 
     float cosAngle = cos(angle);

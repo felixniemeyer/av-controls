@@ -26,12 +26,12 @@ void main() {
   rgb *= (alpha * darkCorner + 1. - darkCorner) - darkCorner * 0.1;
 
   float center = abs(1. - pow(2. - uv.x, 2.) * 0.5);
-  rgb *= 0.5 + 0.5 * smoothstep(0., 0.05 * invLeafScale, absV + center * 0.025 * invLeafScale); 
+  rgb *= 0.7 + 0.3 * smoothstep(0., 0.05 * invLeafScale, absV + center * 0.025 * invLeafScale); 
 
   // riffel
   rgb += abs(mod((uv.x - absV) * 20., 2.0) - 1.) * (border * 0.1);
 
-  rgb *= 1.5; 
+  rgb *= 1.8; 
 
   fragColor = vec4(rgb, alpha); // Unicolored red
 }

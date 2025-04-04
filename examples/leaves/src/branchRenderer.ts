@@ -56,7 +56,7 @@ export class BranchRenderer {
     this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
     this.gl.bindVertexArray(null);
 
-    this.setLeafScale(0.3);
+    this.setLeafScale(1);
   }
 
   private setLeafScale(leafScale: number) {
