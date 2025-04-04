@@ -31,7 +31,6 @@ export class Receiver {
     this.handlePostMessage = this.handlePostMessage.bind(this);
     window.addEventListener('message', this.handlePostMessage.bind(this));
     
-    // Send initial ready message
     this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec)); 
 
     this.rootReceiver.onUpdate = (update: Base.Update) => {

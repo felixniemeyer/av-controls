@@ -14,7 +14,7 @@ if(!gl) {
 }
 
 // Initialize the BranchRenderer
-const branchRenderer = new BranchRenderer(gl, 10);
+const branchRenderer = new BranchRenderer(gl, 100);
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -26,7 +26,7 @@ window.addEventListener('resize', resize);
 
 resize();
 
-const timeScale = 5.
+const timeScale = 1
 const t0 = performance.now();
 let now = 0;
 const mainLoop = () => {

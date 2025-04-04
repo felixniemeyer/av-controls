@@ -1,8 +1,11 @@
 import { Branch } from './branch';
 import { createProgram } from './shaderUtils'; 
 
-import vs from './shaders/branch.vs?raw';
-import fs from './shaders/branch.fs?raw';
+import vs from './shaders/branch.vs.glsl?raw';
+import fs from './shaders/branch.fs.glsl?raw';
+
+import quadVs from './shaders/quad.vs.glsl?raw';
+import quadFS from './shaders/quad.fs.glsl?raw';
 
 console.log(vs);
 console.log(fs);
@@ -14,6 +17,10 @@ export class BranchRenderer {
   private instanceCount: number;
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject | null;
+  private respawnRadius: number = 1
+
+  private quadProgram: WebGLProgram;
+  private quadVao: WebGLVertexArrayObject | null;
 
   constructor(gl: WebGL2RenderingContext, branchCount: number) {
     this.gl = gl;
@@ -31,6 +38,32 @@ export class BranchRenderer {
     this.initializeBranches();
     this.setupInstanceBuffer();
 
+    // quad
+    this.quadProgram = createProgram(this.gl, quadVs, quadFS);
+    this.quadVao = this.gl.createVertexArray();
+    this.gl.bindVertexArray(this.quadVao);
+    const quadBuffer = this.gl.createBuffer();
+    const data = new Float32Array([
+      -1, -1,
+      1, -1,
+      -1, 1,
+      1, 1,
+    ]);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, quadBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.STATIC_DRAW);
+    const positionLocation = this.gl.getAttribLocation(this.quadProgram, 'position');
+    this.gl.enableVertexAttribArray(positionLocation);
+    this.gl.vertexAttribPointer(positionLocation, 2, this.gl.FLOAT, false, 0, 0);
+    this.gl.bindVertexArray(null);
+
+    this.setLeafScale(0.3);
+  }
+
+  private setLeafScale(leafScale: number) {
+    this.gl.useProgram(this.program);
+    this.gl.uniform1f(this.gl.getUniformLocation(this.program, 'leafScale'), leafScale);
+    this.gl.uniform1f(this.gl.getUniformLocation(this.program, 'wiggleFrequency'), 100 / leafScale);
+    this.gl.uniform1f(this.gl.getUniformLocation(this.program, 'invLeafScale'), 1 / leafScale);
   }
 
   private initializeBranches() {
@@ -55,6 +88,22 @@ export class BranchRenderer {
     this.gl.vertexAttribPointer(instanceDataLocation, 4, this.gl.FLOAT, false, 0, 0);
     this.gl.vertexAttribDivisor(instanceDataLocation, 1);
 
+    const colorData = new Float32Array(this.instanceCount * 4);
+    for (let i = 0; i < this.instanceCount; i++) {
+      const branch = this.branches[i];
+      colorData.set(branch.baseColor, i * 4);
+      colorData[i * 4 + 3] = branch.style;
+    }
+    const colorBuffer = this.gl.createBuffer();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colorBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, colorData, this.gl.STATIC_DRAW);
+
+    const colorDataLocation = this.gl.getAttribLocation(this.program, 'colorAndStyle');
+    this.gl.enableVertexAttribArray(colorDataLocation);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, colorBuffer);
+    this.gl.vertexAttribPointer(colorDataLocation, 4, this.gl.FLOAT, false, 0, 0);
+    this.gl.vertexAttribDivisor(colorDataLocation, 1);
+
     // Set up vertex data (position)
     const vertexBuffer = this.gl.createBuffer();
     const vertexData = new Float32Array([
@@ -74,7 +123,7 @@ export class BranchRenderer {
 
   public update(deltaTime: number) {
     this.branches.forEach(branch => {
-      branch.update(deltaTime);
+      branch.update(deltaTime, this.respawnRadius);
     });
   }
 
@@ -86,7 +135,7 @@ export class BranchRenderer {
       const x = branch.position[0]; 
       const y = branch.position[1];
       const angle = branch.getAngle(); 
-      const scale = branch.scale;
+      const scale = branch.getScale();
       instanceData.set([x, y, angle, scale], i * 4);
     }
     this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW); // Use DYNAMIC_DRAW for updates
@@ -100,13 +149,22 @@ export class BranchRenderer {
     this.gl.useProgram(this.program);
     this.gl.uniform2fv(this.gl.getUniformLocation(this.program, 'worldScale'), [1/w, 1/h])
 
-    this.gl.clearColor(0.2, 0.5, 0.6, 0);
+    this.gl.clearColor(0,0,0,0);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+
+    this.respawnRadius = Math.max(w, h);
 
   }
 
-  public render(time: number) {
-    this.updateInstanceBuffer(time); // Update instance data if needed
+  private darkenCount = -60
+  public render() {
+    if(this.darkenCount > 0) {
+      this.darkenFrameBuffer(); 
+      this.darkenCount = -60
+    }
+    this.darkenCount++
+
+    this.updateInstanceBuffer(); // Update instance data if needed
 
     this.gl.useProgram(this.program);
 
@@ -121,8 +179,14 @@ export class BranchRenderer {
     this.gl.enable(this.gl.BLEND);
     this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
 
-    this.gl.bindVertexArray(this.vao);
+    this.gl.bindVertexArray(null);
+  }
 
-    this.gl.flush();
+  // render a full screen quad with a dark color and low alpha
+  private darkenFrameBuffer() {
+    this.gl.useProgram(this.quadProgram);
+    this.gl.bindVertexArray(this.quadVao);
+    this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+    this.gl.bindVertexArray(null);
   }
 }
