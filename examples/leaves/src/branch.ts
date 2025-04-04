@@ -46,7 +46,7 @@ export class Branch {
 
     nextLeaf() {
         this.currentLeafSize = this.leafSize * (0.8 + Math.random() * 0.4)
-        this.nextTurnAfter = (Math.random() + 0.5) * Math.PI 
+        this.nextTurnAfter = (Math.random() + 0.25) * Math.PI * 2 
     }
 
     // Update position based on velocity

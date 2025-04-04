@@ -7,8 +7,10 @@ import fs from './shaders/branch.fs.glsl?raw';
 import quadVs from './shaders/quad.vs.glsl?raw';
 import quadFS from './shaders/quad.fs.glsl?raw';
 
-console.log(vs);
-console.log(fs);
+import {
+  Controls, 
+  Transports
+} from 'av-controls'
 
 export class BranchRenderer {
   private gl: WebGL2RenderingContext;
@@ -21,6 +23,20 @@ export class BranchRenderer {
 
   private quadProgram: WebGLProgram;
   private quadVao: WebGLVertexArrayObject | null;
+
+  private timeScaleFader = new Controls.Fader.Receiver(
+    new Controls.Fader.Spec(
+      new Controls.Base.Args(
+        'timeScale',
+        10,
+        0,
+        10,
+        50,
+        '#777'
+      ), 1, 0.1, 5, 2
+    )
+  )
+
 
   constructor(gl: WebGL2RenderingContext, branchCount: number) {
     this.gl = gl;
@@ -57,6 +73,53 @@ export class BranchRenderer {
     this.gl.bindVertexArray(null);
 
     this.setLeafScale(1);
+    
+    const controlsWindow = window.opener || window.parent
+    new Transports.Window.Receiver(controlsWindow, 'leaves', new Controls.Group.Receiver(
+      new Controls.Group.SpecWithoutControls(
+        new Controls.Base.Args(
+          'leaves',
+          0,
+          0,
+          100,
+          100,
+          '#000000'
+        ),
+      ), 
+      {
+        'leafScale': new Controls.Fader.Receiver(
+          new Controls.Fader.Spec(
+            new Controls.Base.Args(
+              'leafScale',
+              0,
+              0,
+              10,
+              50,
+              '#039f21'
+            ), 1, 0.3, 3, 2
+          ), 
+          (value) => {
+            this.setLeafScale(value);
+          }
+        ), 
+        'timeScale': this.timeScaleFader,
+        'clear Background': new Controls.Pad.Receiver(
+          new Controls.Pad.Spec(
+            new Controls.Base.Args(
+              'clear Background',
+              90,
+              0,
+              10,
+              10,
+              '#922123'
+            ),
+          ),
+          () => {
+            this.darkenFrameBuffer(1);
+          }
+        )
+      }
+    ))
   }
 
   private setLeafScale(leafScale: number) {
@@ -122,8 +185,9 @@ export class BranchRenderer {
   }
 
   public update(deltaTime: number) {
+    const scaledTime = deltaTime * this.timeScaleFader.value;
     this.branches.forEach(branch => {
-      branch.update(deltaTime, this.respawnRadius);
+      branch.update(scaledTime, this.respawnRadius);
     });
   }
 
@@ -183,8 +247,10 @@ export class BranchRenderer {
   }
 
   // render a full screen quad with a dark color and low alpha
-  private darkenFrameBuffer() {
+  private darkenFrameBuffer(alpha: number = 0.01) {
     this.gl.useProgram(this.quadProgram);
+    this.gl.uniform4f(this.gl.getUniformLocation(this.quadProgram, 'color'), 0, 0, 0, alpha);
+
     this.gl.bindVertexArray(this.quadVao);
     this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
     this.gl.bindVertexArray(null);

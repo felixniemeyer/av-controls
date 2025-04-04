@@ -1,88 +1,87 @@
 # AV-Controls
 AV-Controls makes it easy to create a web UI in a dedicated tab for sending control signals to your web app. 
 
-Use the ReceiverBuilder from this package to easily specify a touch controller UI that runs in a separate tab. 
+
+## usage
+
+Install with `npm install av-controls`. 
+
+Then, 
+- create a couple of control receivers (`Controls.<control type>.Receiver`)
+- and a window receiver that will listen to messages from another tab or the parent window in case this runs in an iframe. 
 
 ```ts
-// import the controls and meters you'd like to use
-import { 
-	Fader,
-	FaderSpec,
-} from 'av-controls';
+// import controls and transports from av-controls
+import {
+  Controls, 
+  Transports
+} from 'av-controls'
 
-// create a controls dictionary
-const controls: ControlsDict = {
-  <control-id>: new Fader(
-    new FaderSpec(
-      '<fader label>', 
-      20, 0,        // x, y
-      10, 50,       // width, height
-      '#e35',       // color
-      80,           // initial value
-      60, 140,      // min max
-      2             // displayed decimal places 
-    ), 
-    (value: number) => { 
-      // on fader value change, do something...
-    }
+// create one root control (a group), that contains other controls
+const controlsGroup = new Controls.Group.Receiver(
+  new Controls.Group.SpecWithoutControls(
+    new Controls.Base.Args( // every controller takes a base arg as the first constructor argument
+      'leaves', // label 
+      0, // x position within the parent
+      0, // y position 
+      100, // width
+      100, // height, gaps are added automatically
+      '#000000' // control color
+    ),
   ), 
-  // ... add more controls
-}
+  { // a dictionary of child controls in this group
+    'leafScale': new Controls.Fader.Receiver(
+      new Controls.Fader.Spec(
+        new Controls.Base.Args(
+          'leafScale',
+          0,
+          0,
+          10,
+          50,
+          '#039f21'
+        ), 
+        1, // initial value
+        0.3,  // min value
+        3, // max value
+        2 // displayed decimal places
+      ), 
+      // some controllers take optional callbacks 
+      (value) => {
+        this.setLeafScale(value);
+      }
+    ), 
+    'timeScale': this.timeScaleFader,
+    'clear Background': new Controls.Pad.Receiver(
+      new Controls.Pad.Spec(
+        new Controls.Base.Args(
+          'clear Background',
+          90,
+          0,
+          10,
+          10,
+          '#922123'
+        ),
+      ),
+      () => {
+        this.darkenFrameBuffer(1);
+      }
+    )
+  }
+));
 
-// create the receiver. 
-// this will announce the controls spec to the opener tab
-const receiver = new Receiver(
-  '<app name>', 
-  controls, 
-  '<info text>'
-)
-
+// create the controls receiver
+const controlsWindow = window.opener || window.parent
+new Transports.Window.Receiver(controlsWindow, 'leaves', controlsGroup)
 ```
 
 ## AV-Controller
-The controller UI will run in a different tab. 
-Open you web app from [AV-Controller](https://github.com/felixniemeyer/av-controller/). 
+You can then use it with the av-controller. 
+E.g. you can open it on avonx.com like this: 
 
-## Positioning in percent of parent
-Values for positions and sizes are in unit percent of the container space. 
+[https://avonx.space/single-controller/?control=http://localhost:5174](https://avonx.space/single-controller/?control=http://localhost:5174)
 
-## You can group controls
-There is one control type called `Group`. 
-You can use it e.g. to visually group a set of controls. 
+where the second localhost url with port 5174 should point to your artwork. 
 
-```
-const visualControls: ControlsDict = {
-  ...
-}
-
-const controls: ControlsDict = {
-  <controls-id>: new Group(
-    new GroupSpecWithoutControls( 
-      'visual', 
-      60, 0, 
-      20, 100, 
-      '#440'
-    ), 
-    visualControls // pass a dict of controls
-  )
-}
-```
-... where visualControls is a `ControlsDict` itself. 
-
-## There are various controls
-Look into `./src/control-specs.ts` to see which controls are available. 
-
-As of writing this, these here are: 
-```
-class GroupSpecWithoutControls
-class GroupSpec
-class FaderSpec
-class PadSpec
-class SwitchSpec
-class SelectorSpec
-class ConfirmButtonSpec
-class LabelSpec
-class ConfirmSwitchSpec
-class CakeSpec
-```
+## WebSocket support
+Besides the window transport that is very fast and works with `postMessage`, there is also a websocket implementation. 
 

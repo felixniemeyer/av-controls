@@ -26,14 +26,13 @@ window.addEventListener('resize', resize);
 
 resize();
 
-const timeScale = 1
 const t0 = performance.now();
 let now = 0;
 const mainLoop = () => {
   const newNow = (performance.now() - t0) * 0.001;
   const deltaTime = newNow - now;
   now = newNow;
-  branchRenderer.update(deltaTime * timeScale);
+  branchRenderer.update(deltaTime);
   branchRenderer.render();
   requestAnimationFrame(mainLoop);
 };

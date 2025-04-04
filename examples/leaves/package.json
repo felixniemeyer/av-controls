@@ -13,6 +13,7 @@
     "vite": "^5.3.4"
   },
   "dependencies": {
+    "av-controls": "^0.3.2",
     "gl-matrix": "^3.4.3"
   }
 }
