@@ -252,7 +252,7 @@ export class Receiver extends WebSocketClient {
   onConnectionOpened(): void {
     this.sendWsMessage(new Messages.RegisterReceiver());
     for(const id in this.rootReceivers) {
-      const rootReceiver = this.rootReceivers[id]
+      const rootReceiver = this.rootReceivers[id]!
       this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec)));
       rootReceiver.onUpdate = (update: Base.Update) => {
         this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update)))
@@ -267,7 +267,10 @@ export class Receiver extends WebSocketClient {
         switch(wsMessage.message.type) {
           case AvControlsMessages.ControlSignal.type:
             const avMessage = wsMessage.message as AvControlsMessages.ControlSignal
-            this.rootReceivers[wsMessage.panelId].handleSignal(avMessage.signal)
+            const receiver = this.rootReceivers[wsMessage.panelId]
+            if (receiver) {
+              receiver.handleSignal(avMessage.signal)
+            }
             break;
         }
         break;

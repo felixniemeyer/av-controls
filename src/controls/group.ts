@@ -60,9 +60,11 @@ export class Receiver extends Base.Receiver {
     const controlSpecs: SpecsDict = {};
     for (const id in controls) {
       const control = controls[id]
-      controlSpecs[id] = control.spec;
-      control.onUpdate = (update: Base.Update) => {
-        this.onUpdate(new Update(id, update))
+      if (control) {
+        controlSpecs[id] = control.spec;
+        control.onUpdate = (update: Base.Update) => {
+          this.onUpdate(new Update(id, update))
+        }
       }
     }
     this.spec = this.makeSpec(spec, controlSpecs);
@@ -79,7 +81,10 @@ export class Receiver extends Base.Receiver {
   }
 
   handleSignal(signal: Signal): void {
-    this.controls[signal.controlId].handleSignal(signal.signal);
+    const control = this.controls[signal.controlId];
+    if (control) {
+      control.handleSignal(signal.signal);
+    }
   }
 }
 
@@ -102,30 +107,39 @@ export class Sender extends Base.Sender {
     super()
     this.senders = {}
     for(const id in spec.controlSpecs) {
-      const sender = createSenderFromSpec(spec.controlSpecs[id])
-      this.senders[id] = sender
-      sender.onSignal = (signal: Base.Signal) => {
-        this.onSignal(new Signal(id, signal))
+      const controlSpec = spec.controlSpecs[id]
+      if (controlSpec) {
+        const sender = createSenderFromSpec(controlSpec)
+        this.senders[id] = sender
+        sender.onSignal = (signal: Base.Signal) => {
+          this.onSignal(new Signal(id, signal))
+        }
+        sender.parent = this
       }
-      sender.parent = this
     }
   }
 
   handleUpdate(update: Update) {
-    this.senders[update.controlId].handleUpdate(update.update)
+    const sender = this.senders[update.controlId]
+    if (sender) {
+      sender.handleUpdate(update.update)
+    }
   }
 
   getState() {
     const states: GroupState = {}
     for (const id in this.senders) {
-      states[id] = this.senders[id].getState()
+      states[id] = this.senders[id]!.getState()
     }
     return new State(states)
   }
 
   setState(state: State) {
     for (const id in this.senders) {
-      this.senders[id].setState(state.states[id])
+      const stateForControl = state.states[id]
+      if (stateForControl) {
+        this.senders[id]!.setState(stateForControl)
+      }
     }
   }
 
@@ -135,14 +149,14 @@ export class Sender extends Base.Sender {
     callback(this, nodeObject)
     for (const id in this.senders) {
       const subObject = children[id] = children[id] || {}
-      this.senders[id].traverse(callback, subObject)
+      this.senders[id]!.traverse(callback, subObject)
     }
   }
 
   deepForeach(callback: Base.DeepForeachCallback) {
     callback(this)
     for (const id in this.senders) {
-      this.senders[id].deepForeach(callback)
+      this.senders[id]!.deepForeach(callback)
     }
   }
 }
