@@ -3,9 +3,9 @@
  */
 
 import * as Controls from './controls';
-import { 
-  Base, 
-  Group, 
+import {
+  Base,
+  Group,
   Cake,
   Textbox,
   Letterbox,
@@ -18,7 +18,8 @@ import {
   Dots,
   Knob,
   PresetButton,
-  Tabs
+  Tabs,
+  Joystick
 } from './controls';
 
 export type SpecsDict = {[id: string]: Controls.Base.Spec};
@@ -59,6 +60,8 @@ export function createSenderFromSpec(spec: Controls.Base.Spec): Base.Sender {
     return new Group.Sender(spec as Group.Spec)
   } else if(spec.type === Tabs.Spec.type) {
     return new Tabs.Sender(spec as Tabs.Spec)
-  } 
+  } else if(spec.type === Joystick.Spec.type) {
+    return new Joystick.Sender(spec as Joystick.Spec)
+  }
   throw new Error(`Unknown control type: ${spec.type}`)
 }
