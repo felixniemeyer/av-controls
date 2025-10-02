@@ -1,0 +1,14 @@
+Protocol Package:
+- The control implementations have significant duplication in their class structure - they could
+benefit from better base classes and factory patterns
+- The createSenderFromSpec function we worked on earlier is a good example of this - all controls
+follow similar patterns
+
+Controller Package:
+- Touch/mouse handling is duplicated across many controls (Fader, Dots, Joystick) - this could be
+extracted into reusable Vue composables
+- The control styling logic has similar patterns that could be unified
+
+Platform Frontend:
+- Token/authentication management appears scattered and could be centralized
+- API calling patterns could be more consistent

@@ -70,8 +70,9 @@ export class Sender extends Base.Sender {
   }
 
   load(presetId: string) {
-    if(this.parent) {
-      this.parent.setState(this.savedParentStates[presetId])
+    const savedState = this.savedParentStates[presetId]
+    if(this.parent && savedState) {
+      this.parent.setState(savedState)
     }
     this.lastPresetLoaded = presetId
   }
@@ -94,8 +95,8 @@ export class Sender extends Base.Sender {
       let i = 0
       if(this.lastPresetLoaded !== undefined) {
         i = (presetIds.indexOf(this.lastPresetLoaded) + 1) % presetIds.length
-      } 
-      const nextPresetId = presetIds[i]
+      }
+      const nextPresetId = presetIds[i]!
       this.load(nextPresetId)
     }
   }
@@ -113,7 +114,7 @@ export class Sender extends Base.Sender {
       } else {
         i = Math.floor(Math.random() * presetIds.length)
       }
-      const nextPresetId = presetIds[i]
+      const nextPresetId = presetIds[i]!
       this.load(nextPresetId)
     }
   }

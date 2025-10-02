@@ -13,22 +13,51 @@ Then,
 ```ts
 // import controls and transports from av-controls
 import {
-  Controls, 
+  Controls,
   Transports
 } from 'av-controls'
+
+// example functions that would be called by the controls
+function setLeafScale(value: number) {
+  // your implementation here
+  console.log('Leaf scale set to:', value);
+}
+
+function darkenFrameBuffer(alpha: number) {
+  // your implementation here
+  console.log('Darkening frame buffer with alpha:', alpha);
+}
+
+// create a time scale fader that can be referenced
+const timeScaleFader = new Controls.Fader.Receiver(
+  new Controls.Fader.Spec(
+    new Controls.Base.Args(
+      'timeScale',
+      10,
+      0,
+      10,
+      50,
+      '#777777'
+    ),
+    1, // initial value
+    0.1, // min value
+    5, // max value
+    2 // displayed decimal places
+  )
+);
 
 // create one root control (a group), that contains other controls
 const controlsGroup = new Controls.Group.Receiver(
   new Controls.Group.SpecWithoutControls(
     new Controls.Base.Args( // every controller takes a base arg as the first constructor argument
-      'leaves', // label 
+      'leaves', // label
       0, // x position within the parent
-      0, // y position 
+      0, // y position
       100, // width
       100, // height, gaps are added automatically
       '#000000' // control color
     ),
-  ), 
+  ),
   { // a dictionary of child controls in this group
     'leafScale': new Controls.Fader.Receiver(
       new Controls.Fader.Spec(
@@ -39,18 +68,18 @@ const controlsGroup = new Controls.Group.Receiver(
           10,
           50,
           '#039f21'
-        ), 
+        ),
         1, // initial value
         0.3,  // min value
         3, // max value
         2 // displayed decimal places
-      ), 
-      // some controllers take optional callbacks 
+      ),
+      // some controllers take optional callbacks
       (value) => {
-        this.setLeafScale(value);
+        setLeafScale(value);
       }
-    ), 
-    'timeScale': this.timeScaleFader,
+    ),
+    'timeScale': timeScaleFader,
     'clear Background': new Controls.Pad.Receiver(
       new Controls.Pad.Spec(
         new Controls.Base.Args(
@@ -63,7 +92,7 @@ const controlsGroup = new Controls.Group.Receiver(
         ),
       ),
       () => {
-        this.darkenFrameBuffer(1);
+        darkenFrameBuffer(1);
       }
     )
   }
