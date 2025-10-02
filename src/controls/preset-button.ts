@@ -73,6 +73,7 @@ export class Sender extends Base.Sender {
     if(this.parent) {
       this.parent.setState(this.savedParentStates[presetId])
     }
+    this.lastPresetLoaded = presetId
   }
 
   getAllPresets() {
