@@ -26,7 +26,49 @@ export type SpecsDict = {[id: string]: Controls.Base.Spec};
 export type ReceiversDict = {[id: string]: Controls.Base.Receiver};
 export type SendersDict = {[id: string]: Controls.Base.Sender};
 
-export class Mapping {
+/**
+ * Base class for input sources (MIDI, keyboard, etc.)
+ */
+export abstract class InputSource {
+  constructor(
+    public readonly id: string,
+    public readonly type: string
+  ) {}
+}
+
+/**
+ * MIDI input source
+ */
+export class MidiSource extends InputSource {
+  constructor(
+    id: string,
+    public readonly midiType: 'key' | 'cc'
+  ) {
+    super(id, 'midi')
+  }
+}
+
+/**
+ * Keyboard input source
+ */
+export class KeyboardSource extends InputSource {
+  constructor(
+    public readonly code: string, // e.g., "KeyA", "Digit1"
+    public readonly key: string   // e.g., "a", "1"
+  ) {
+    super(`keyboard-${code}`, 'keyboard')
+  }
+}
+
+/**
+ * Base class for all input signals
+ */
+export abstract class InputSignal {
+  constructor(
+    public readonly sourceId: string,
+    public readonly type: string,
+    public readonly timestamp: number = Date.now()
+  ) {}
 }
 
 export function createSenderFromSpec(spec: Controls.Base.Spec): Base.Sender {

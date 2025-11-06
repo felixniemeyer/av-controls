@@ -1,5 +1,3 @@
-import { Mapping } from '../common'
-
 // updates go from visuals to controller
 export class Update {
 }
@@ -64,8 +62,6 @@ export class State {
 export abstract class Sender {
   public abstract spec: Spec
 
-  public mappings: Mapping[] = []
-
   public onSignal: OnSignalCallback = () => {}
   public onTouch: OnTouchCallback = () => {}
 
@@ -76,14 +72,6 @@ export abstract class Sender {
 
   tabIndex() {
     return 0
-  }
-
-  addMapping(mapping: Mapping) {
-    this.mappings.push(mapping)
-  }
-
-  removeMappings() {
-    this.mappings = []
   }
 
   handleUpdate(_update: Update) {
