@@ -19,7 +19,8 @@ import {
   Knob,
   PresetButton,
   Tabs,
-  Joystick
+  Joystick,
+  Modal // Added Modal import
 } from './controls';
 
 export type SpecsDict = {[id: string]: Controls.Base.Spec};
@@ -102,8 +103,11 @@ export function createSenderFromSpec(spec: Controls.Base.Spec): Base.Sender {
     return new Group.Sender(spec as Group.Spec)
   } else if(spec.type === Tabs.Spec.type) {
     return new Tabs.Sender(spec as Tabs.Spec)
-  } else if(spec.type === Joystick.Spec.type) {
-    return new Joystick.Sender(spec as Joystick.Spec)
+    } else if(spec.type === Joystick.Spec.type) {
+      return new Joystick.Sender(spec as Joystick.Spec)
+    } else if(spec.type === Modal.Spec.type) { // Added Modal case
+      return new Modal.Sender(spec as Modal.Spec)
+    }
+    throw new Error(`Unknown control type: ${spec.type}`)
   }
-  throw new Error(`Unknown control type: ${spec.type}`)
-}
+  

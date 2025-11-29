@@ -6,6 +6,7 @@ export * as Dots from './dots';
 export * as Fader from './fader';
 export * as Group from './group';
 export * as Joystick from './joystick';
+export * as Modal from './modal';
 export * as Knob from './knob';
 export * as Label from './label';
 export * as Letterbox from './letterbox';

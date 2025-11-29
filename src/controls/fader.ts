@@ -26,6 +26,7 @@ export class Spec extends Base.Spec {
     public min: number, 
     public max: number,
     public decimalPlaces: number,
+    public isHorizontal: boolean = false,
   ) { 
     super(baseArgs);
   }
