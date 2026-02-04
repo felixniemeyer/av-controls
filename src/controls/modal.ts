@@ -30,6 +30,8 @@ export class Spec extends Base.Spec {
   constructor(
     baseArgs: Base.Args,
     public controlSpecs: SpecsDict, 
+    public modalWidth: number = 80,
+    public modalHeight: number = 80,
   ) {
     super(baseArgs);
   }
@@ -44,6 +46,8 @@ export class Receiver extends Base.Receiver {
   constructor(
     spec: Group.SpecWithoutControls, // We use Group's SpecWithoutControls as the "input" spec
     public controls: ReceiversDict,
+    public modalWidth: number = 80,
+    public modalHeight: number = 80,
   ) {
     super();
     const controlSpecs: SpecsDict = {};
@@ -58,7 +62,9 @@ export class Receiver extends Base.Receiver {
     }
     this.spec = new Spec(
         spec.baseArgs,
-        controlSpecs
+        controlSpecs,
+        modalWidth,
+        modalHeight
     )
   }
 
