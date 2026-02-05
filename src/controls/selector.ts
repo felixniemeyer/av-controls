@@ -8,6 +8,14 @@ export class Signal extends Base.Signal {
     }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public index: number,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'selector'
   public type = Spec.type
@@ -40,6 +48,7 @@ export class Receiver extends Base.Receiver {
     if (this.onSelect) {
       this.onSelect(payload.index);
     }
+    this.onUpdate(new Update(payload.index));
   }
 }
 
@@ -80,5 +89,9 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.select(state.index)
+  }
+
+  handleUpdate(update: Update) {
+    this.index = update.index
   }
 }

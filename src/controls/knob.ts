@@ -15,6 +15,14 @@ export class Signal extends Base.Signal {
   }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public value: number,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'knob'
   public type = Spec.type
@@ -50,6 +58,7 @@ export class Receiver extends Base.Receiver {
     if (this.onChange) {
       this.onChange(signal.value);
     }
+    this.onUpdate(new Update(signal.value));
   }
 }
 
@@ -91,5 +100,9 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.setValue(state.value)
+  }
+
+  handleUpdate(update: Update) {
+    this.value = update.value
   }
 }

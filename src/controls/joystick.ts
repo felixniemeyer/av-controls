@@ -18,6 +18,15 @@ export class Signal extends Base.Signal {
   }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public x: number,
+    public y: number,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'joystick'
   public type = Spec.type
@@ -49,6 +58,7 @@ export class Receiver extends Base.Receiver {
     if (this.onPositionChange) {
       this.onPositionChange(payload.x, payload.y);
     }
+    this.onUpdate(new Update(payload.x, payload.y));
   }
 }
 
@@ -89,5 +99,10 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.setPosition(state.x, state.y)
+  }
+
+  handleUpdate(update: Update) {
+    this.x = update.x
+    this.y = update.y
   }
 }

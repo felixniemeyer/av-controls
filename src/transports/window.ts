@@ -2,6 +2,7 @@ import { Sender as BaseSender } from './base';
 import { CommunicationError, Logger } from '../error';
 
 import * as AvControlsMessages from '../messages';
+import { Timeline } from '../timeline';
 import { Base } from '../controls';
 
 namespace Messages {
@@ -26,7 +27,8 @@ export class Receiver {
   constructor(
     private otherWindow: Window,
     private name: string,
-    private rootReceiver: Base.Receiver
+    private rootReceiver: Base.Receiver,
+    private timeline?: Timeline
   ) {
     this.handlePostMessage = this.handlePostMessage.bind(this);
     window.addEventListener('message', this.handlePostMessage.bind(this));
@@ -35,6 +37,13 @@ export class Receiver {
 
     this.rootReceiver.onUpdate = (update: Base.Update) => {
       this.send(new AvControlsMessages.ControlUpdate(update))
+      this.timeline?.onControlUpdate(update)
+    }
+
+    if (this.timeline) {
+      this.timeline.onMessage = (message: AvControlsMessages.Message) => {
+        this.send(message)
+      }
     }
   }
 
@@ -43,6 +52,12 @@ export class Receiver {
     if (data.type === Messages.WrappedMessage.type) {
       if(data.message.type === AvControlsMessages.ControlSignal.type) {
         this.rootReceiver.handleSignal((data.message as AvControlsMessages.ControlSignal).signal)
+        this.timeline?.onControlSignal((data.message as AvControlsMessages.ControlSignal).signal)
+      } else if(
+        data.message.type === AvControlsMessages.TimelineEditMessage.type ||
+        data.message.type === AvControlsMessages.TimelineRequestState.type
+      ) {
+        this.timeline?.handleMessage(data.message)
       }
     }
   }

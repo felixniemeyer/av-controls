@@ -16,6 +16,14 @@ class Signal extends Base.Signal {
   }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public text: string,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'textbox'
   public type = Spec.type
@@ -47,6 +55,7 @@ export class Receiver extends Base.Receiver {
     if (this.onTextChange) {
       this.onTextChange(this.text);
     }
+    this.onUpdate(new Update(this.text));
   }
 }
 
@@ -78,5 +87,9 @@ export class Sender extends Base.Sender {
 
   setState(state: State) {
     this.text = state.text
+  }
+
+  handleUpdate(update: Update) {
+    this.text = update.text
   }
 }

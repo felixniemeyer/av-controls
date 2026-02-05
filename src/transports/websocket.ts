@@ -8,6 +8,7 @@ import { CommunicationError, Logger } from '../error';
 import { Messages as AvControlsMessages } from '..';
 
 import { Base } from '../controls'
+import { Timeline } from '../timeline'
 
 // Create a namespace to group the messages
 export namespace Messages {
@@ -135,9 +136,15 @@ abstract class WebSocketClient {
     
     return new Promise<void>((resolve, reject) => {
       try {
+        if (Logger && typeof Logger.debug === 'function') {
+          Logger.debug('WebSocket create', { url: this.url });
+        }
         this.ws = new WebSocket(this.url);
         
         this.ws.onopen = () => {
+          if (Logger && typeof Logger.debug === 'function') {
+            Logger.debug('WebSocket open', { url: this.url });
+          }
           this.isConnecting = false;
           this.reconnectAttempts = 0;
           Logger.info('WebSocket connected', { url: this.url });
@@ -149,6 +156,9 @@ abstract class WebSocketClient {
         };
         
         this.ws.onclose = (event) => {
+          if (Logger && typeof Logger.debug === 'function') {
+            Logger.debug('WebSocket close', { url: this.url, code: event.code, reason: event.reason });
+          }
           Logger.warn('WebSocket closed', { code: event.code, reason: event.reason });
           this.isConnecting = false;
           
@@ -158,6 +168,9 @@ abstract class WebSocketClient {
         };
         
         this.ws.onerror = (error) => {
+          if (Logger && typeof Logger.debug === 'function') {
+            Logger.debug('WebSocket error', { url: this.url, error });
+          }
           Logger.error('WebSocket error', { error });
           this.isConnecting = false;
           
@@ -167,6 +180,9 @@ abstract class WebSocketClient {
         };
         
         this.ws.onmessage = (event) => {
+          if (Logger && typeof Logger.debug === 'function') {
+            Logger.debug('WebSocket message', { preview: typeof event.data === 'string' ? event.data.slice(0, 200) : event.data });
+          }
           try{
             const deserialized = JSON.parse(event.data as string);
             this.handleWsMessage(deserialized as Messages.Message);
@@ -243,7 +259,8 @@ export class Receiver extends WebSocketClient {
   constructor(
     private rootReceivers: {[id: string]: Base.Receiver},
     url: string,
-    options?: WebSocketAdapterOptions
+    options?: WebSocketAdapterOptions,
+    private timelines?: {[id: string]: Timeline}
   ) {
     super(url, options)
     this.initialize()
@@ -256,6 +273,14 @@ export class Receiver extends WebSocketClient {
       this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec)));
       rootReceiver.onUpdate = (update: Base.Update) => {
         this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update)))
+        this.timelines?.[id]?.onControlUpdate(update)
+      }
+
+      const timeline = this.timelines?.[id]
+      if (timeline) {
+        timeline.onMessage = (message: AvControlsMessages.Message) => {
+          this.sendWsMessage(new Messages.WrappedMessage(id, message))
+        }
       }
     }
   }
@@ -270,7 +295,12 @@ export class Receiver extends WebSocketClient {
             const receiver = this.rootReceivers[wsMessage.panelId]
             if (receiver) {
               receiver.handleSignal(avMessage.signal)
+              this.timelines?.[wsMessage.panelId]?.onControlSignal(avMessage.signal)
             }
+            break;
+          case AvControlsMessages.TimelineEditMessage.type:
+          case AvControlsMessages.TimelineRequestState.type:
+            this.timelines?.[wsMessage.panelId]?.handleMessage(wsMessage.message)
             break;
         }
         break;
@@ -280,6 +310,7 @@ export class Receiver extends WebSocketClient {
 
 export class Sender extends WebSocketClient implements BaseSender {
   panelId: string | null = null
+  private lastSeqByPath = new Map<string, number>()
 
   constructor(
     url: string,
@@ -287,6 +318,7 @@ export class Sender extends WebSocketClient implements BaseSender {
     options?: WebSocketAdapterOptions,
   ) {
     super(url, options)
+    this.initialize()
   }
 
   onConnectionOpened(): void {
@@ -301,7 +333,22 @@ export class Sender extends WebSocketClient implements BaseSender {
         this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
         break;
       case Messages.WrappedMessage.type:
-        this.broadcastAvMessage((message as Messages.WrappedMessage).message); 
+        const wrapped = message as Messages.WrappedMessage
+        const avMessage = wrapped.message as AvControlsMessages.Message
+        if (avMessage.type === AvControlsMessages.ControlUpdate.type) {
+          const updateMsg = avMessage as AvControlsMessages.ControlUpdate
+          const seq = updateMsg.seq
+          if (typeof seq === 'number') {
+            const path = extractUpdatePath(updateMsg.update)
+            const key = path.join('.')
+            const last = this.lastSeqByPath.get(key) ?? 0
+            if (seq <= last) {
+              return
+            }
+            this.lastSeqByPath.set(key, seq)
+          }
+        }
+        this.broadcastAvMessage(avMessage); 
     }
   }
   
@@ -324,3 +371,12 @@ export class Sender extends WebSocketClient implements BaseSender {
   }
 }
 
+function extractUpdatePath(update: any): string[] {
+  const path: string[] = [];
+  let current = update;
+  while (current && typeof current === 'object' && 'controlId' in current && 'update' in current) {
+    path.push(current.controlId);
+    current = current.update;
+  }
+  return path;
+}

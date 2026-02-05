@@ -16,6 +16,14 @@ export class Signal extends Base.Signal {
   }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public value: number,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'fader'
   public type = Spec.type
@@ -27,6 +35,7 @@ export class Spec extends Base.Spec {
     public max: number,
     public decimalPlaces: number,
     public isHorizontal: boolean = false,
+    public mapping: 'linear' | 'square' = 'linear',
   ) { 
     super(baseArgs);
   }
@@ -49,6 +58,7 @@ export class Receiver extends Base.Receiver {
     if (this.onChange) {
       this.onChange(payload.value);
     }
+    this.onUpdate(new Update(payload.value));
   }
 }
 
@@ -76,12 +86,12 @@ export class Sender extends Base.Sender {
   }
 
   setNormValue(normValue: number) {
-    const mapped = normValue * (this.spec.max - this.spec.min) + this.spec.min
+    const mapped = mapNormToValue(normValue, this.spec.min, this.spec.max, this.spec.mapping)
     this.setValue(mapped)
   }
 
   getNormValue() {
-    return (this.value - this.spec.min) / (this.spec.max - this.spec.min)
+    return mapValueToNorm(this.value, this.spec.min, this.spec.max, this.spec.mapping)
   }
 
   getState() {
@@ -91,4 +101,26 @@ export class Sender extends Base.Sender {
   setState(state: State) {
     this.setValue(state.value)
   }
+
+  handleUpdate(update: Update) {
+    this.value = update.value
+  }
+}
+
+function mapNormToValue(normValue: number, min: number, max: number, mapping: 'linear' | 'square') {
+  const clamped = Math.max(0, Math.min(1, normValue))
+  if (mapping === 'square') {
+    return min + (clamped * clamped) * (max - min)
+  }
+  return min + clamped * (max - min)
+}
+
+function mapValueToNorm(value: number, min: number, max: number, mapping: 'linear' | 'square') {
+  const range = max - min
+  if (range === 0) return 0
+  const clamped = Math.max(0, Math.min(1, (value - min) / range))
+  if (mapping === 'square') {
+    return Math.sqrt(clamped)
+  }
+  return clamped
 }

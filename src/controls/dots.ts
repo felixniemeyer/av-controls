@@ -78,6 +78,7 @@ export class Receiver extends Base.Receiver {
     if (this.onDotsChange) {
       this.onDotsChange(this.values);
     }
+    this.onUpdate(new Update(this.values));
   }
 }
 
@@ -115,5 +116,9 @@ export class Sender extends Base.Sender {
 
   deproxy() {
     return this.values.map(dot => dot.slice()) as Dot[]
+  }
+
+  handleUpdate(update: Update) {
+    this.values = update.values.map(dot => dot.slice()) as Dot[]
   }
 }

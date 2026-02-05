@@ -16,6 +16,14 @@ export class Signal extends Base.Signal {
     }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public on: boolean,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'switch'
   public type = Spec.type
@@ -44,6 +52,7 @@ export class Receiver extends Base.Receiver {
     if (this.onToggle) {
       this.onToggle(payload.on);
     }
+    this.onUpdate(new Update(payload.on));
   }
 }
 
@@ -77,5 +86,9 @@ export class Sender extends Base.Sender {
   setState(state: State) {
     this.on = state.on
     this.onSignal(new Signal(this.on))
+  }
+
+  handleUpdate(update: Update) {
+    this.on = update.on
   }
 }
