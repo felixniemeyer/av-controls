@@ -1,15 +1,18 @@
 import * as Controls from '../controls';
 import { Base } from '../controls';
-import {
+import type {
   TimelineState,
   TimelineControl,
   TimelineLane,
   TimelinePoint,
   TimelineEdit,
+} from '../messages';
+import {
   TimelineStateMessage,
   TimelineEditMessage,
   TimelineRequestState,
 } from '../messages';
+import { evalLane } from './curve';
 
 type ControlPath = string[];
 
@@ -29,6 +32,8 @@ type ControlAutomationState = {
 type TimelineOptions = {
   autoplay?: boolean;
   initialTime?: number;
+  alwaysRender?: boolean;
+  onRender?: (deltaSeconds: number) => void;
 };
 
 const containerTypes = new Set([
@@ -67,26 +72,6 @@ function walkReceivers(
 
 function ensureSorted(points: TimelinePoint[]): TimelinePoint[] {
   return [...points].sort((a, b) => a.t - b.t);
-}
-
-function evalLinear(points: TimelinePoint[], t: number): number | null {
-  if (!points.length) return null;
-  if (points.length === 1) return points[0]!.v;
-  if (t <= points[0]!.t) return points[0]!.v;
-  const last = points[points.length - 1]!;
-  if (t >= last.t) return last.v;
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]!;
-    const b = points[i + 1]!;
-    if (t >= a.t && t <= b.t) {
-      const span = b.t - a.t;
-      if (span <= 0) return a.v;
-      const factor = (t - a.t) / span;
-      return a.v + (b.v - a.v) * factor;
-    }
-  }
-  return last.v;
 }
 
 function extractSignalPath(signal: Base.Signal): { path: ControlPath; leaf: any } {
@@ -129,6 +114,24 @@ function getLaneValueMap(spec: Base.Spec, laneValues: Record<string, number>): R
   return { value: laneValues.value ?? 0 };
 }
 
+function getSpecRange(spec: Base.Spec): { min?: number; max?: number } {
+  if (spec.type === Controls.Fader.Spec.type || spec.type === Controls.Knob.Spec.type) {
+    const s = spec as Controls.Fader.Spec;
+    return { min: s.min, max: s.max };
+  }
+  if (spec.type === Controls.Switch.Spec.type) {
+    return { min: 0, max: 1 };
+  }
+  if (spec.type === Controls.Selector.Spec.type) {
+    const s = spec as Controls.Selector.Spec;
+    return { min: 0, max: Math.max(0, s.options.length - 1) };
+  }
+  if (spec.type === Controls.Joystick.Spec.type) {
+    return { min: -1, max: 1 };
+  }
+  return {};
+}
+
 function applyLaneValues(receiver: Base.Receiver, spec: Base.Spec, values: Record<string, number>) {
   if (spec.type === Controls.Fader.Spec.type || spec.type === Controls.Knob.Spec.type) {
     const value = values.value;
@@ -169,6 +172,16 @@ export class Timeline {
   private lastDelta = 0;
   public time = 0;
   public playing = false;
+  public alwaysRender = true;
+
+  // Render loop state
+  private _rafId = 0;
+  private _lastFrameTime = 0;
+  private _running = false;
+  private _pendingRender = false;
+  private _onRender: ((deltaSeconds: number) => void) | null = null;
+  private controlChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private controlChangeDebounceMs = 500;
 
   public onMessage: ((message: any) => void) | null = null;
 
@@ -178,7 +191,75 @@ export class Timeline {
   ) {
     this.time = options?.initialTime ?? 0;
     this.playing = options?.autoplay ?? false;
+    this.alwaysRender = options?.alwaysRender ?? true;
+    this._onRender = options?.onRender ?? null;
     this.buildIndex();
+  }
+
+  /**
+   * Start the render loop. The Timeline will call onRender each frame.
+   */
+  start() {
+    if (this._running) return;
+    this._running = true;
+    this._lastFrameTime = performance.now();
+    this._scheduleFrame();
+  }
+
+  /**
+   * Stop the render loop.
+   */
+  stop() {
+    this._running = false;
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = 0;
+    }
+  }
+
+  /**
+   * Request a single render frame (useful when paused and alwaysRender is off).
+   */
+  requestRender() {
+    this._pendingRender = true;
+    if (!this._running) {
+      this._lastFrameTime = performance.now();
+      this._scheduleFrame();
+    }
+  }
+
+  private _scheduleFrame() {
+    this._rafId = requestAnimationFrame(this._loop.bind(this));
+  }
+
+  private _loop() {
+    const now = performance.now();
+    const deltaMs = now - this._lastFrameTime;
+    this._lastFrameTime = now;
+    const deltaSeconds = deltaMs * 0.001;
+
+    // Advance time and apply automation
+    this.tick(deltaSeconds);
+
+    // Call render callback
+    if (this._onRender) {
+      this._onRender(deltaSeconds);
+    }
+
+    // Decide whether to continue
+    const shouldContinue = this._running && (this.playing || this.alwaysRender);
+    this._pendingRender = false;
+
+    if (shouldContinue) {
+      this._scheduleFrame();
+    }
+  }
+
+  private _ensureLoopRunning() {
+    if (this._running && !this._rafId) {
+      this._lastFrameTime = performance.now();
+      this._scheduleFrame();
+    }
   }
 
   now() {
@@ -214,7 +295,7 @@ export class Timeline {
     }
     if (message?.type === TimelineEditMessage.type) {
       const payload = message as TimelineEditMessage;
-      this.applyEdit(payload.edit);
+      this.applyEdit(payload.edit, payload.seq);
       this.sendState();
     }
   }
@@ -227,6 +308,20 @@ export class Timeline {
       state.enabled = false;
       state.manualOverride = true;
     }
+    this.scheduleControlChangeRender();
+  }
+
+  private scheduleControlChangeRender() {
+    // If already rendering continuously, no need to debounce
+    if (this.playing || this.alwaysRender) return;
+
+    if (this.controlChangeDebounceTimer) {
+      clearTimeout(this.controlChangeDebounceTimer);
+    }
+    this.controlChangeDebounceTimer = setTimeout(() => {
+      this.controlChangeDebounceTimer = null;
+      this.requestRender();
+    }, this.controlChangeDebounceMs);
   }
 
   onControlUpdate(update: Base.Update) {
@@ -277,7 +372,7 @@ export class Timeline {
     return state;
   }
 
-  private applyEdit(edit: TimelineEdit) {
+  private applyEdit(edit: TimelineEdit, seq?: number) {
     switch (edit.type) {
       case 'set-control-enabled': {
         const state = this.ensureControlState(edit.path);
@@ -289,21 +384,22 @@ export class Timeline {
       }
       case 'set-lane-enabled': {
         const state = this.ensureControlState(edit.path);
-        const lane = state.lanes.find(l => l.id === edit.laneId);
+        const lane = state.lanes.find(l => l.key === edit.laneKey);
         if (lane) lane.enabled = edit.enabled;
         break;
       }
       case 'set-lane-points': {
         const state = this.ensureControlState(edit.path);
-        const lane = state.lanes.find(l => l.id === edit.laneId);
+        const lane = state.lanes.find(l => l.key === edit.laneKey);
         if (lane) {
           lane.points = ensureSorted(edit.points);
+          if (seq !== undefined) lane.seq = seq;
         }
         break;
       }
       case 'add-lane': {
         const state = this.ensureControlState(edit.path);
-        const exists = state.lanes.find(l => l.id === edit.lane.id);
+        const exists = state.lanes.find(l => l.key === edit.lane.key);
         if (!exists) {
           state.lanes.push({
             ...edit.lane,
@@ -314,15 +410,28 @@ export class Timeline {
       }
       case 'remove-lane': {
         const state = this.ensureControlState(edit.path);
-        state.lanes = state.lanes.filter(l => l.id !== edit.laneId);
+        state.lanes = state.lanes.filter(l => l.key !== edit.laneKey);
         break;
       }
       case 'set-playing': {
+        const wasPlaying = this.playing;
         this.playing = edit.playing;
+        if (!wasPlaying && edit.playing) {
+          this._ensureLoopRunning();
+        }
         break;
       }
       case 'seek': {
         this.seek(edit.time);
+        this.requestRender();
+        break;
+      }
+      case 'set-always-render': {
+        const wasAlwaysRender = this.alwaysRender;
+        this.alwaysRender = edit.alwaysRender;
+        if (!wasAlwaysRender && edit.alwaysRender) {
+          this._ensureLoopRunning();
+        }
         break;
       }
     }
@@ -335,9 +444,10 @@ export class Timeline {
       if (!entry) continue;
 
       const laneValues: Record<string, number> = {};
+      const range = getSpecRange(entry.spec);
       for (const lane of state.lanes) {
         if (!lane.enabled) continue;
-        const value = evalLinear(lane.points, this.time);
+        const value = evalLane(lane.points, this.time, 32, range.min, range.max);
         if (value === null) continue;
         laneValues[lane.key] = value;
       }
@@ -353,6 +463,7 @@ export class Timeline {
     const state: TimelineState = {
       time: this.time,
       playing: this.playing,
+      alwaysRender: this.alwaysRender,
       controls: Array.from(this.automationState.values()).map(control => ({
         path: [...control.path],
         enabled: control.enabled,
@@ -370,6 +481,7 @@ export class Timeline {
     return {
       time: this.time,
       playing: this.playing,
+      alwaysRender: this.alwaysRender,
       controls: Array.from(this.automationState.values()).map(control => ({
         path: [...control.path],
         enabled: control.enabled,
@@ -393,3 +505,4 @@ export type {
 };
 
 export * from './client';
+export * from './curve';

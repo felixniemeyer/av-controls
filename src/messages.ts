@@ -49,15 +49,14 @@ export class TimelineRequestState implements Message {
 export type TimelinePoint = {
   t: number;
   v: number;
+  kind?: 'pos' | 'ctrl';
 };
 
 export type TimelineLane = {
-  id: string;
   key: string;
   enabled: boolean;
   points: TimelinePoint[];
-  min?: number;
-  max?: number;
+  seq?: number;
 };
 
 export type TimelineControl = {
@@ -70,17 +69,19 @@ export type TimelineControl = {
 export type TimelineState = {
   time: number;
   playing: boolean;
+  alwaysRender: boolean;
   controls: TimelineControl[];
 };
 
 export type TimelineEdit =
   | { type: 'set-control-enabled'; path: string[]; enabled: boolean }
-  | { type: 'set-lane-enabled'; path: string[]; laneId: string; enabled: boolean }
-  | { type: 'set-lane-points'; path: string[]; laneId: string; points: TimelinePoint[] }
+  | { type: 'set-lane-enabled'; path: string[]; laneKey: string; enabled: boolean }
+  | { type: 'set-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
   | { type: 'add-lane'; path: string[]; lane: TimelineLane }
-  | { type: 'remove-lane'; path: string[]; laneId: string }
+  | { type: 'remove-lane'; path: string[]; laneKey: string }
   | { type: 'set-playing'; playing: boolean }
-  | { type: 'seek'; time: number };
+  | { type: 'seek'; time: number }
+  | { type: 'set-always-render'; alwaysRender: boolean };
 
 export class TimelineStateMessage implements Message {
   static type = 'timeline-state' as const;
@@ -88,6 +89,7 @@ export class TimelineStateMessage implements Message {
 
   constructor(
     public state: TimelineState,
+    public seq?: number,
   ) {}
 }
 
@@ -97,5 +99,6 @@ export class TimelineEditMessage implements Message {
 
   constructor(
     public edit: TimelineEdit,
+    public seq?: number,
   ) {}
 }
