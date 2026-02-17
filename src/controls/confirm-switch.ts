@@ -22,7 +22,7 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public initiallyOn: boolean = false
+    public initialState: State = new State(false),
   ) {
     super(baseArgs);
   }
@@ -39,13 +39,24 @@ export class Receiver extends Base.Receiver {
     public onConfirmedSwitch?: (isOn: boolean) => void,
   ) {
     super();
-    this.on = spec.initiallyOn
+    this.on = spec.initialState.on;
   }
 
   handleSignal(signal: Signal): void {
-    this.on = signal.on
+    this.on = signal.on;
     if (this.onConfirmedSwitch) {
       this.onConfirmedSwitch(signal.on);
+    }
+  }
+
+  getState(): State {
+    return new State(this.on);
+  }
+
+  restoreState(state: State): void {
+    this.on = state.on;
+    if (this.onConfirmedSwitch) {
+      this.onConfirmedSwitch(this.on);
     }
   }
 }
@@ -60,13 +71,13 @@ export class State extends Base.State {
 
 export class Sender extends Base.Sender {
   awaitingConfirmation: boolean = false
-  on: boolean 
+  on: boolean
 
   constructor(
     public spec: Spec,
   ) {
     super()
-    this.on = spec.initiallyOn
+    this.on = spec.initialState.on
   }
 
   press() {

@@ -30,7 +30,7 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public initiallyOn: boolean = false
+    public initialState: State = new State(false),
   ) {
     super(baseArgs);
   }
@@ -38,13 +38,13 @@ export class Spec extends Base.Spec {
 
 export class Receiver extends Base.Receiver {
   public on: boolean;
-  
+
   constructor(
     public spec: Spec,
     public onToggle?: (on: boolean) => void,
   ) {
     super();
-    this.on = spec.initiallyOn;
+    this.on = spec.initialState.on;
   }
 
   handleSignal(payload: Signal): void {
@@ -53,6 +53,17 @@ export class Receiver extends Base.Receiver {
       this.onToggle(payload.on);
     }
     this.onUpdate(new Update(payload.on));
+  }
+
+  getState(): State {
+    return new State(this.on);
+  }
+
+  restoreState(state: State): void {
+    this.on = state.on;
+    if (this.onToggle) {
+      this.onToggle(this.on);
+    }
   }
 }
 
@@ -71,7 +82,7 @@ export class Sender extends Base.Sender {
     public spec: Spec,
   ) {
     super()
-    this.on = spec.initiallyOn
+    this.on = spec.initialState.on
   }
 
   toggle() {

@@ -23,7 +23,7 @@ export class Spec extends Base.Spec {
   constructor(
     baseArgs: Base.Args,
     public options: string[],
-    public initialIndex: number,
+    public initialState: State,
   ) {
     super(baseArgs);
   }
@@ -34,13 +34,13 @@ export class Spec extends Base.Spec {
  */
 export class Receiver extends Base.Receiver {
   public index: number;
-  
+
   constructor(
     public spec: Spec,
     public onSelect?: (index: number) => void,
   ) {
     super();
-    this.index = spec.initialIndex;
+    this.index = spec.initialState.index;
   }
 
   handleSignal(payload: Signal): void {
@@ -49,6 +49,17 @@ export class Receiver extends Base.Receiver {
       this.onSelect(payload.index);
     }
     this.onUpdate(new Update(payload.index));
+  }
+
+  getState(): State {
+    return new State(this.index);
+  }
+
+  restoreState(state: State): void {
+    this.index = state.index;
+    if (this.onSelect) {
+      this.onSelect(this.index);
+    }
   }
 }
 
@@ -67,7 +78,7 @@ export class Sender extends Base.Sender {
     public spec: Spec,
   ) {
     super()
-    this.index = spec.initialIndex
+    this.index = spec.initialState.index
   }
 
   select(value: number) {

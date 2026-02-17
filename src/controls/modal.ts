@@ -74,6 +74,23 @@ export class Receiver extends Base.Receiver {
       control.handleSignal(signal.signal);
     }
   }
+
+  getState(): State {
+    const states: GroupState = {};
+    for (const id in this.controls) {
+      states[id] = this.controls[id]!.getState();
+    }
+    return new State(states);
+  }
+
+  restoreState(state: State): void {
+    for (const id in this.controls) {
+      const childState = state.states[id];
+      if (childState) {
+        this.controls[id]!.restoreState(childState);
+      }
+    }
+  }
 }
 
 type GroupState = {[id: string]: Base.State}

@@ -30,13 +30,13 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public initialValue: number,
-    public min: number, 
+    public initialState: State,
+    public min: number,
     public max: number,
     public decimalPlaces: number,
     public isHorizontal: boolean = false,
     public mapping: 'linear' | 'square' = 'linear',
-  ) { 
+  ) {
     super(baseArgs);
   }
 
@@ -44,13 +44,13 @@ export class Spec extends Base.Spec {
 
 export class Receiver extends Base.Receiver {
   public value: number;
-  
+
   constructor(
     public spec: Spec,
     public onChange?: (value: number) => void,
   ) {
     super();
-    this.value = spec.initialValue;
+    this.value = spec.initialState.value;
   }
 
   handleSignal(payload: Signal): void {
@@ -59,6 +59,18 @@ export class Receiver extends Base.Receiver {
       this.onChange(payload.value);
     }
     this.onUpdate(new Update(payload.value));
+  }
+
+  getState(): State {
+    return new State(this.value);
+  }
+
+  restoreState(state: State): void {
+    this.value = state.value;
+    if (this.onChange) {
+      this.onChange(this.value);
+    }
+    // Note: does NOT call onUpdate - avoids persistence loop
   }
 }
 
@@ -75,9 +87,9 @@ export class Sender extends Base.Sender {
 
   constructor(
     public spec: Spec,
-	) {
+  ) {
     super()
-    this.value = spec.initialValue
+    this.value = spec.initialState.value
   }
 
   setValue(value: number) {

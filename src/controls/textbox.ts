@@ -30,10 +30,10 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-		public initialText: string,
-	) {
-		super(baseArgs);
-	}
+    public initialState: State,
+  ) {
+    super(baseArgs);
+  }
 }
 
 /**
@@ -43,11 +43,11 @@ export class Receiver extends Base.Receiver {
   public text: string = '';
 
   constructor(
-    public spec: Spec, 
-    public onTextChange?: (text: string) => void, 
+    public spec: Spec,
+    public onTextChange?: (text: string) => void,
   ) {
     super();
-    this.text = spec.initialText;
+    this.text = spec.initialState.text;
   }
 
   handleSignal(signal: Signal): void {
@@ -56,6 +56,17 @@ export class Receiver extends Base.Receiver {
       this.onTextChange(this.text);
     }
     this.onUpdate(new Update(this.text));
+  }
+
+  getState(): State {
+    return new State(this.text);
+  }
+
+  restoreState(state: State): void {
+    this.text = state.text;
+    if (this.onTextChange) {
+      this.onTextChange(this.text);
+    }
   }
 }
 
@@ -74,7 +85,7 @@ export class Sender extends Base.Sender {
     public spec: Spec,
   ) {
     super()
-    this.text = spec.initialText
+    this.text = spec.initialState.text
   }
 
   send() {

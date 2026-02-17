@@ -33,7 +33,7 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public initialValue: { x: number; y: number } = { x: 0, y: 0 },
+    public initialState: State = new State(0, 0),
   ) {
     super(baseArgs);
   }
@@ -48,8 +48,8 @@ export class Receiver extends Base.Receiver {
     public onPositionChange?: (x: number, y: number) => void,
   ) {
     super();
-    this.x = spec.initialValue.x;
-    this.y = spec.initialValue.y;
+    this.x = spec.initialState.x;
+    this.y = spec.initialState.y;
   }
 
   handleSignal(payload: Signal): void {
@@ -59,6 +59,18 @@ export class Receiver extends Base.Receiver {
       this.onPositionChange(payload.x, payload.y);
     }
     this.onUpdate(new Update(payload.x, payload.y));
+  }
+
+  getState(): State {
+    return new State(this.x, this.y);
+  }
+
+  restoreState(state: State): void {
+    this.x = state.x;
+    this.y = state.y;
+    if (this.onPositionChange) {
+      this.onPositionChange(this.x, this.y);
+    }
   }
 }
 
@@ -77,10 +89,10 @@ export class Sender extends Base.Sender {
 
   constructor(
     public spec: Spec,
-	) {
+  ) {
     super()
-    this.x = spec.initialValue.x
-    this.y = spec.initialValue.y
+    this.x = spec.initialState.x
+    this.y = spec.initialState.y
   }
 
   setPosition(x: number, y: number) {

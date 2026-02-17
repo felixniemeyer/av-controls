@@ -4,6 +4,7 @@ import { CommunicationError, Logger } from '../error';
 import * as AvControlsMessages from '../messages';
 import { Timeline } from '../timeline';
 import { Base } from '../controls';
+import { StatePersistence, PersistenceOptions } from '../persistence';
 
 namespace Messages {
   interface Message {
@@ -24,26 +25,61 @@ namespace Messages {
  * Main receiver class for handling control communication
  */
 export class Receiver {
+  private persistence: StatePersistence | null = null
+  public ready: Promise<void>
+
   constructor(
     private otherWindow: Window,
     private name: string,
     private rootReceiver: Base.Receiver,
-    private timeline?: Timeline
+    private timeline?: Timeline,
+    persistenceOptions?: PersistenceOptions,
   ) {
     this.handlePostMessage = this.handlePostMessage.bind(this);
     window.addEventListener('message', this.handlePostMessage.bind(this));
-    
-    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec)); 
-
-    this.rootReceiver.onUpdate = (update: Base.Update) => {
-      this.send(new AvControlsMessages.ControlUpdate(update))
-      this.timeline?.onControlUpdate(update)
-    }
 
     if (this.timeline) {
       this.timeline.onMessage = (message: AvControlsMessages.Message) => {
         this.send(message)
       }
+    }
+
+    // Initialize with or without persistence
+    if (persistenceOptions && persistenceOptions.enabled !== false) {
+      this.persistence = new StatePersistence(persistenceOptions)
+      this.ready = this.initWithPersistence()
+    } else {
+      this.initWithoutPersistence()
+      this.ready = Promise.resolve()
+    }
+  }
+
+  private async initWithPersistence(): Promise<void> {
+    try {
+      await this.persistence!.init()
+      const storedState = await this.persistence!.loadState()
+      this.persistence!.applyStoredState(this.rootReceiver, storedState)
+    } catch (e) {
+      Logger.warn('Failed to load persisted state', { error: e })
+    }
+
+    // Send spec after applying stored state
+    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec))
+
+    // Hook onUpdate for persistence
+    this.rootReceiver.onUpdate = (update: Base.Update) => {
+      this.send(new AvControlsMessages.ControlUpdate(update))
+      this.timeline?.onControlUpdate(update)
+      this.persistence?.handleUpdate(update)
+    }
+  }
+
+  private initWithoutPersistence(): void {
+    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec))
+
+    this.rootReceiver.onUpdate = (update: Base.Update) => {
+      this.send(new AvControlsMessages.ControlUpdate(update))
+      this.timeline?.onControlUpdate(update)
     }
   }
 

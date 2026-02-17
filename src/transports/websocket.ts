@@ -9,6 +9,7 @@ import { Messages as AvControlsMessages } from '..';
 
 import { Base } from '../controls'
 import { Timeline } from '../timeline'
+import { StatePersistence, PersistenceOptions } from '../persistence'
 
 // Create a namespace to group the messages
 export namespace Messages {
@@ -256,24 +257,62 @@ abstract class WebSocketClient {
 }
 
 export class Receiver extends WebSocketClient {
+  private persistenceByPanel = new Map<string, StatePersistence>()
+  public ready: Promise<void>
+
   constructor(
     private rootReceivers: {[id: string]: Base.Receiver},
     url: string,
     options?: WebSocketAdapterOptions,
-    private timelines?: {[id: string]: Timeline}
+    private timelines?: {[id: string]: Timeline},
+    private persistenceOptions?: {[id: string]: PersistenceOptions},
   ) {
     super(url, options)
-    this.initialize()
+
+    // Initialize persistence for each panel before connecting
+    if (persistenceOptions) {
+      this.ready = this.initPersistence().then(() => {
+        this.initialize()
+      })
+    } else {
+      this.ready = Promise.resolve()
+      this.initialize()
+    }
+  }
+
+  private async initPersistence(): Promise<void> {
+    for (const id in this.persistenceOptions) {
+      const opts = this.persistenceOptions[id]
+      if (opts && opts.enabled !== false) {
+        const persistence = new StatePersistence(opts)
+        this.persistenceByPanel.set(id, persistence)
+
+        try {
+          await persistence.init()
+          const storedState = await persistence.loadState()
+          const receiver = this.rootReceivers[id]
+          if (receiver) {
+            persistence.applyStoredState(receiver, storedState)
+          }
+        } catch (e) {
+          Logger.warn('Failed to load persisted state for panel', { panelId: id, error: e })
+        }
+      }
+    }
   }
 
   onConnectionOpened(): void {
     this.sendWsMessage(new Messages.RegisterReceiver());
     for(const id in this.rootReceivers) {
       const rootReceiver = this.rootReceivers[id]!
+      const persistence = this.persistenceByPanel.get(id)
+
       this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec)));
+
       rootReceiver.onUpdate = (update: Base.Update) => {
         this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update)))
         this.timelines?.[id]?.onControlUpdate(update)
+        persistence?.handleUpdate(update)
       }
 
       const timeline = this.timelines?.[id]

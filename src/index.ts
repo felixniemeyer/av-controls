@@ -7,3 +7,4 @@ export * from './common';
 
 export * as Transports from './transports';
 export * as Timeline from './timeline';
+export * as Persistence from './persistence';

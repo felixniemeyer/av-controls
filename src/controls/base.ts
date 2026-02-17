@@ -14,7 +14,13 @@ export class Args {
     public width: number,
     public height: number,
     public color: string,
-  ) {}
+  ) {
+    // Sanitize name: '/' is used as path separator in persistence
+    if (name.includes('/')) {
+      console.warn(`Control name "${name}" contains '/'. Replacing with '-'.`)
+      this.name = name.replace(/\//g, '-')
+    }
+  }
 }
 
 export class Spec {
@@ -49,6 +55,14 @@ export abstract class Receiver {
   public onUpdate: OnUpdateCallback = () => {}
 
   handleSignal(_signal: Signal): void {
+  }
+
+  getState(): State {
+    return new State()
+  }
+
+  // Restore state WITHOUT triggering onUpdate (avoids persistence loop)
+  restoreState(_state: State): void {
   }
 }
 

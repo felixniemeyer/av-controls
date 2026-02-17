@@ -16,17 +16,25 @@ export class Update extends Base.Update {
   }
 }
 
+export class State extends Base.State {
+  constructor(
+    public value: number,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'cake'
   public type = Spec.type
 
   constructor(
     baseArgs: Base.Args,
-    public min: number, 
+    public min: number,
     public max: number,
-    public initialValue: number,
+    public initialState: State,
     public decimalPlaces: number,
-  ) { 
+  ) {
     super(baseArgs);
   }
 }
@@ -50,12 +58,20 @@ export class Sender extends Base.Sender {
 
   constructor(
     public spec: Spec,
-	) {
+  ) {
     super()
-    this.value = spec.initialValue
+    this.value = spec.initialState.value
   }
 
   handleUpdate(payload: Update) {
     this.value = payload.value
+  }
+
+  getState() {
+    return new State(this.value)
+  }
+
+  setState(state: State) {
+    this.value = state.value
   }
 }

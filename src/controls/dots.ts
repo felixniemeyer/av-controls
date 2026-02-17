@@ -43,7 +43,7 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public initialValues: Dot[],
+    public initialState: State,
     public xPadding = 0.01,
     public yPadding = -1,
 //    public displayStyle: 'curve' | 'polygon',
@@ -63,7 +63,7 @@ export class Receiver extends Base.Receiver {
     public onDotsChange?: (dots: Dot[]) => void,
   ) {
     super();
-    this.values = [...spec.initialValues]; // Clone to avoid reference issues
+    this.values = spec.initialState.values.map(dot => [...dot] as Dot); // Clone to avoid reference issues
   }
 
   handleSignal(signal: Signal): void {
@@ -74,11 +74,22 @@ export class Receiver extends Base.Receiver {
     } else if (signal.type === 'full') {
       this.values = signal.value as FullValue;
     }
-    
+
     if (this.onDotsChange) {
       this.onDotsChange(this.values);
     }
     this.onUpdate(new Update(this.values));
+  }
+
+  getState(): State {
+    return new State(this.values.map(dot => [...dot] as Dot));
+  }
+
+  restoreState(state: State): void {
+    this.values = state.values.map(dot => [...dot] as Dot);
+    if (this.onDotsChange) {
+      this.onDotsChange(this.values);
+    }
   }
 }
 
@@ -95,9 +106,9 @@ export class Sender extends Base.Sender {
 
   constructor(
     public spec: Spec,
-	) {
+  ) {
     super()
-    this.values = spec.initialValues
+    this.values = spec.initialState.values.map(dot => [...dot] as Dot)
   }
 
   moveDot(index: number, value: Dot) {

@@ -29,7 +29,7 @@ export class Spec extends Base.Spec {
 
   constructor(
     baseArgs: Base.Args,
-    public initialValue: number,
+    public initialState: State,
     public min: number,
     public max: number,
     public decimalPlaces: number,
@@ -50,7 +50,7 @@ export class Receiver extends Base.Receiver {
     public onChange?: (value: number) => void,
   ) {
     super();
-    this.value = spec.initialValue;
+    this.value = spec.initialState.value;
   }
 
   handleSignal(signal: Signal): void {
@@ -59,6 +59,17 @@ export class Receiver extends Base.Receiver {
       this.onChange(signal.value);
     }
     this.onUpdate(new Update(signal.value));
+  }
+
+  getState(): State {
+    return new State(this.value);
+  }
+
+  restoreState(state: State): void {
+    this.value = state.value;
+    if (this.onChange) {
+      this.onChange(this.value);
+    }
   }
 }
 
@@ -77,7 +88,7 @@ export class Sender extends Base.Sender {
     public spec: Spec,
   ) {
     super()
-    this.value = spec.initialValue
+    this.value = spec.initialState.value
   }
 
   setValue(value: number) {
