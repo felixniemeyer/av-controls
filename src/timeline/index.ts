@@ -32,8 +32,22 @@ type ControlAutomationState = {
 type TimelineOptions = {
   autoplay?: boolean;
   initialTime?: number;
+  initialState?: TimelineStateKind;
   alwaysRender?: boolean;
-  onRender?: (deltaSeconds: number) => void;
+  loopEnabled?: boolean;
+  loopDurationSec?: number;
+  onRender?: (timeContext: TimeContext) => void | Promise<void>;
+};
+
+export type TimelineStateKind = 'playing' | 'paused' | 'scrubbing' | 'rendering';
+
+export type TimeContext = {
+  now: number;
+  /** Timeline-time delta (how much timeline time advanced this frame). */
+  deltaTime: number;
+  /** Wall-clock delta between rAF frames. */
+  worldDeltaTime: number;
+  state: TimelineStateKind;
 };
 
 const containerTypes = new Set([
@@ -170,16 +184,29 @@ export class Timeline {
   private lastValues = new Map<string, Record<string, number>>();
 
   private lastDelta = 0;
+  private lastWorldDelta = 0;
   public time = 0;
   public playing = false;
   public alwaysRender = true;
+  public loopEnabled = false;
+  public loopDurationSec = 4;
+  private timelineState: TimelineStateKind = 'paused';
+  private renderingDelta = 1 / 30;
+  private _debug = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-debug') === '1';
+  private _debugVerbose = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-debug-verbose') === '1';
+  private _logTimeEachFrame = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-log-time') === '1';
+  private _debugLastAt = 0;
+  private _debugFrames = 0;
 
   // Render loop state
   private _rafId = 0;
   private _lastFrameTime = 0;
   private _running = false;
   private _pendingRender = false;
-  private _onRender: ((deltaSeconds: number) => void) | null = null;
+  private _onRender: ((timeContext: TimeContext) => void | Promise<void>) | null = null;
   private controlChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private controlChangeDebounceMs = 500;
 
@@ -191,7 +218,10 @@ export class Timeline {
   ) {
     this.time = options?.initialTime ?? 0;
     this.playing = options?.autoplay ?? false;
+    this.timelineState = options?.initialState ?? (this.playing ? 'playing' : 'paused');
     this.alwaysRender = options?.alwaysRender ?? true;
+    this.loopEnabled = options?.loopEnabled ?? false;
+    this.loopDurationSec = options?.loopDurationSec ?? 4;
     this._onRender = options?.onRender ?? null;
     this.buildIndex();
   }
@@ -232,22 +262,46 @@ export class Timeline {
     this._rafId = requestAnimationFrame(this._loop.bind(this));
   }
 
-  private _loop() {
+  private async _loop() {
+    this._rafId = 0;
     const now = performance.now();
     const deltaMs = now - this._lastFrameTime;
     this._lastFrameTime = now;
-    const deltaSeconds = deltaMs * 0.001;
+    const worldDeltaSeconds = deltaMs * 0.001;
+    const deltaSeconds = this.timelineState === 'rendering'
+      ? this.renderingDelta
+      : worldDeltaSeconds;
 
     // Advance time and apply automation
-    this.tick(deltaSeconds);
+    this.tick(deltaSeconds, worldDeltaSeconds);
+    if (this.timelineState === 'playing' || this.timelineState === 'rendering') {
+      this.sendState();
+    }
+    this._debugFrames += 1;
+    if (this._logTimeEachFrame) {
+      console.log(
+        `[Timeline][time] state=${this.timelineState}`
+        + ` now=${this.time.toFixed(6)}`
+        + ` delta=${this.lastDelta.toFixed(6)}`
+        + ` worldDelta=${this.lastWorldDelta.toFixed(6)}`
+      );
+    }
+    this._logVerbose(
+      `frame state=${this.timelineState} now=${this.time.toFixed(3)} dt=${deltaSeconds.toFixed(4)}`
+    );
 
-    // Call render callback
+    // Call render callback with timeline-owned context.
     if (this._onRender) {
-      this._onRender(deltaSeconds);
+      try {
+        await this._onRender(this.getTimeContext());
+      } catch (error) {
+        console.error('[Timeline] onRender failed:', error);
+      }
     }
 
     // Decide whether to continue
-    const shouldContinue = this._running && (this.playing || this.alwaysRender);
+    const shouldContinue = this._running
+      && (this.timelineState === 'playing' || this.timelineState === 'rendering' || this.alwaysRender || this._pendingRender);
     this._pendingRender = false;
 
     if (shouldContinue) {
@@ -266,26 +320,105 @@ export class Timeline {
     return this.time;
   }
 
+  state(): TimelineStateKind {
+    return this.timelineState;
+  }
+
+  setState(state: TimelineStateKind) {
+    const prev = this.timelineState;
+    this.timelineState = state;
+    this.playing = state === 'playing';
+    if (this._debug && prev !== state) {
+      console.log(`[Timeline] state ${prev} -> ${state} @ t=${this.time.toFixed(3)}`);
+    }
+    if (state === 'playing' || state === 'rendering') {
+      this._ensureLoopRunning();
+    }
+  }
+
+  private isRunningState(state: TimelineStateKind) {
+    return state === 'playing' || state === 'rendering';
+  }
+
+  private applyTimelineState(state: TimelineStateKind) {
+    const wasRunning = this.isRunningState(this.timelineState);
+    this.setState(state);
+    const isRunning = this.isRunningState(state);
+    if (!wasRunning && isRunning) {
+      this._ensureLoopRunning();
+    }
+  }
+
+  setRenderingFps(fps: number) {
+    if (!Number.isFinite(fps) || fps <= 0) return;
+    this.renderingDelta = 1 / fps;
+    if (this._debug) {
+      console.log(`[Timeline] rendering fps=${fps.toFixed(3)} delta=${this.renderingDelta.toFixed(6)}s`);
+    }
+  }
+
+  getTimeContext(): TimeContext {
+    return {
+      now: this.time,
+      deltaTime: this.lastDelta,
+      worldDeltaTime: this.lastWorldDelta,
+      state: this.state(),
+    };
+  }
+
   deltaTime() {
     return this.lastDelta;
   }
 
-  tick(deltaSeconds: number) {
-    this.lastDelta = deltaSeconds;
-    if (this.playing) {
-      this.time += deltaSeconds;
+  tick(deltaSeconds: number, worldDeltaSeconds = deltaSeconds) {
+    this.lastWorldDelta = worldDeltaSeconds;
+    if (this.timelineState === 'playing' || this.timelineState === 'rendering') {
+      this.lastDelta = deltaSeconds;
+      let nextTime = this.time + deltaSeconds;
+      if (this.loopEnabled && this.loopDurationSec > 0 && nextTime >= this.loopDurationSec) {
+        nextTime = 0;
+      }
+      this.time = Math.max(0, nextTime);
       this.applyAutomation();
+    } else {
+      this.lastDelta = 0;
     }
+    this._logStatsOncePerSecond();
   }
 
   seek(time: number) {
     this.time = Math.max(0, time);
     this.lastDelta = 0;
     this.applyAutomation();
+    this._logVerbose(`seek now=${this.time.toFixed(3)}`);
   }
 
   setPlaying(playing: boolean) {
-    this.playing = playing;
+    this.setState(playing ? 'playing' : 'paused');
+  }
+
+  private _logVerbose(message: string) {
+    if (!this._debug || !this._debugVerbose) return;
+    console.log(`[Timeline][v] ${message}`);
+  }
+
+  private _logStatsOncePerSecond() {
+    if (!this._debug) return;
+    const now = performance.now();
+    if (this._debugLastAt === 0) {
+      this._debugLastAt = now;
+      return;
+    }
+    const dt = (now - this._debugLastAt) / 1000;
+    if (dt < 1) return;
+    const fps = this._debugFrames / dt;
+    console.log(
+      `[Timeline][stats] state=${this.timelineState}`
+      + ` t=${this.time.toFixed(3)} dt=${this.lastDelta.toFixed(4)} worldDt=${this.lastWorldDelta.toFixed(4)}`
+      + ` fps=${fps.toFixed(1)} alwaysRender=${this.alwaysRender}`
+    );
+    this._debugLastAt = now;
+    this._debugFrames = 0;
   }
 
   handleMessage(message: any) {
@@ -296,7 +429,7 @@ export class Timeline {
     if (message?.type === TimelineEditMessage.type) {
       const payload = message as TimelineEditMessage;
       this.applyEdit(payload.edit, payload.seq);
-      this.sendState();
+      this.sendState(payload.seq);
     }
   }
 
@@ -414,11 +547,11 @@ export class Timeline {
         break;
       }
       case 'set-playing': {
-        const wasPlaying = this.playing;
-        this.playing = edit.playing;
-        if (!wasPlaying && edit.playing) {
-          this._ensureLoopRunning();
-        }
+        this.applyTimelineState(edit.playing ? 'playing' : 'paused');
+        break;
+      }
+      case 'set-state': {
+        this.applyTimelineState(edit.state);
         break;
       }
       case 'seek': {
@@ -431,6 +564,19 @@ export class Timeline {
         this.alwaysRender = edit.alwaysRender;
         if (!wasAlwaysRender && edit.alwaysRender) {
           this._ensureLoopRunning();
+        }
+        break;
+      }
+      case 'set-loop-enabled': {
+        this.loopEnabled = edit.loopEnabled;
+        break;
+      }
+      case 'set-loop-duration': {
+        if (Number.isFinite(edit.loopDurationSec) && edit.loopDurationSec > 0) {
+          this.loopDurationSec = edit.loopDurationSec;
+          if (this.loopEnabled && this.time >= this.loopDurationSec) {
+            this.time = this.time % this.loopDurationSec;
+          }
         }
         break;
       }
@@ -458,12 +604,14 @@ export class Timeline {
     }
   }
 
-  private sendState() {
-    if (!this.onMessage) return;
-    const state: TimelineState = {
+  private buildStateSnapshot(): TimelineState {
+    return {
       time: this.time,
+      state: this.timelineState,
       playing: this.playing,
       alwaysRender: this.alwaysRender,
+      loopEnabled: this.loopEnabled,
+      loopDurationSec: this.loopDurationSec,
       controls: Array.from(this.automationState.values()).map(control => ({
         path: [...control.path],
         enabled: control.enabled,
@@ -474,24 +622,16 @@ export class Timeline {
         })),
       })),
     };
-    this.onMessage(new TimelineStateMessage(state));
+  }
+
+  private sendState(seq?: number) {
+    if (!this.onMessage) return;
+    const state = this.buildStateSnapshot();
+    this.onMessage(new TimelineStateMessage(state, seq));
   }
 
   getState(): TimelineState {
-    return {
-      time: this.time,
-      playing: this.playing,
-      alwaysRender: this.alwaysRender,
-      controls: Array.from(this.automationState.values()).map(control => ({
-        path: [...control.path],
-        enabled: control.enabled,
-        manualOverride: control.manualOverride,
-        lanes: control.lanes.map(lane => ({
-          ...lane,
-          points: [...lane.points],
-        })),
-      })),
-    };
+    return this.buildStateSnapshot();
   }
 }
 

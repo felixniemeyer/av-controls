@@ -1,4 +1,4 @@
-import { type Message, type TimelineLane, ControlUpdate, RootSpecification, TimelineEditMessage, TimelineRequestState, TimelineStateMessage } from '../messages';
+import { type Message, ControlUpdate, RootSpecification, TimelineEditMessage, TimelineRequestState, TimelineStateMessage } from '../messages';
 import type { TimelineEdit, TimelineState } from './index';
 import type { Sender as TransportSender } from '../transports/base';
 
@@ -11,6 +11,7 @@ export class TimelineClient {
   private rootSpec: RootSpecification | null = null;
   private seqCounter = 0;
   private pendingSeqs = new Map<string, number>(); // controlPath:laneKey -> seq
+  private latestTimelineEditSeq = 0;
 
   public onState: ((state: TimelineState) => void) | null = null;
   public onRootSpec: ((spec: RootSpecification) => void) | null = null;
@@ -41,11 +42,17 @@ export class TimelineClient {
   }
 
   sendEdit(edit: TimelineEdit, seq?: number) {
-    this.sender.send(new TimelineEditMessage(edit, seq));
+    const effectiveSeq = seq ?? ++this.seqCounter;
+    this.latestTimelineEditSeq = Math.max(this.latestTimelineEditSeq, effectiveSeq);
+    this.sender.send(new TimelineEditMessage(edit, effectiveSeq));
   }
 
   setPlaying(playing: boolean) {
     this.sendEdit({ type: 'set-playing', playing });
+  }
+
+  setState(state: 'playing' | 'paused' | 'scrubbing' | 'rendering') {
+    this.sendEdit({ type: 'set-state', state });
   }
 
   seek(time: number) {
@@ -54,6 +61,14 @@ export class TimelineClient {
 
   setAlwaysRender(alwaysRender: boolean) {
     this.sendEdit({ type: 'set-always-render', alwaysRender });
+  }
+
+  setLoopEnabled(loopEnabled: boolean) {
+    this.sendEdit({ type: 'set-loop-enabled', loopEnabled });
+  }
+
+  setLoopDuration(loopDurationSec: number) {
+    this.sendEdit({ type: 'set-loop-duration', loopDurationSec });
   }
 
   setControlEnabled(path: string[], enabled: boolean) {
@@ -87,6 +102,10 @@ export class TimelineClient {
     }
     if (message.type === TimelineStateMessage.type) {
       const payload = message as TimelineStateMessage;
+      if (typeof payload.seq === 'number' && payload.seq < this.latestTimelineEditSeq) {
+        // Stale state echo from an older timeline edit.
+        return;
+      }
       const filteredState = this.filterOwnEdits(payload.state);
       this.state = filteredState;
       this.onState?.(filteredState);

@@ -68,8 +68,11 @@ export type TimelineControl = {
 
 export type TimelineState = {
   time: number;
+  state: 'playing' | 'paused' | 'scrubbing' | 'rendering';
   playing: boolean;
   alwaysRender: boolean;
+  loopEnabled: boolean;
+  loopDurationSec: number;
   controls: TimelineControl[];
 };
 
@@ -80,8 +83,11 @@ export type TimelineEdit =
   | { type: 'add-lane'; path: string[]; lane: TimelineLane }
   | { type: 'remove-lane'; path: string[]; laneKey: string }
   | { type: 'set-playing'; playing: boolean }
+  | { type: 'set-state'; state: 'playing' | 'paused' | 'scrubbing' | 'rendering' }
   | { type: 'seek'; time: number }
-  | { type: 'set-always-render'; alwaysRender: boolean };
+  | { type: 'set-always-render'; alwaysRender: boolean }
+  | { type: 'set-loop-enabled'; loopEnabled: boolean }
+  | { type: 'set-loop-duration'; loopDurationSec: number };
 
 export class TimelineStateMessage implements Message {
   static type = 'timeline-state' as const;

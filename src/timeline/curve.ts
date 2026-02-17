@@ -1,4 +1,4 @@
-import type { TimelineLane, TimelinePoint } from '../messages';
+import type { TimelinePoint } from '../messages';
 
 type Point2 = { t: number; v: number };
 
