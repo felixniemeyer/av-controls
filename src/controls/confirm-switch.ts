@@ -16,6 +16,14 @@ export class Signal extends Base.Signal {
   }
 }
 
+export class Update extends Base.Update {
+  constructor(
+    public on: boolean,
+  ) {
+    super();
+  }
+}
+
 export class Spec extends Base.Spec {
   static type = 'confirm-switch'
   public type = Spec.type
@@ -47,6 +55,7 @@ export class Receiver extends Base.Receiver {
     if (this.onConfirmedSwitch) {
       this.onConfirmedSwitch(signal.on);
     }
+    this.onUpdate(new Update(signal.on));
   }
 
   getState(): State {
