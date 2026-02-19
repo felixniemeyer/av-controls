@@ -9,7 +9,8 @@ import { Messages as AvControlsMessages } from '..';
 
 import { Base } from '../controls'
 import { Timeline } from '../timeline'
-import { StatePersistence, PersistenceOptions } from '../persistence'
+import { StatePersistence } from '../persistence'
+import type { PersistenceOptions } from '../persistence'
 
 // Create a namespace to group the messages
 export namespace Messages {
@@ -307,7 +308,7 @@ export class Receiver extends WebSocketClient {
       const rootReceiver = this.rootReceivers[id]!
       const persistence = this.persistenceByPanel.get(id)
 
-      this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec)));
+      this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec, rootReceiver.getState())));
 
       rootReceiver.onUpdate = (update: Base.Update) => {
         this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update)))

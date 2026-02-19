@@ -4,7 +4,8 @@ import { CommunicationError, Logger } from '../error';
 import * as AvControlsMessages from '../messages';
 import { Timeline } from '../timeline';
 import { Base } from '../controls';
-import { StatePersistence, PersistenceOptions } from '../persistence';
+import { StatePersistence } from '../persistence';
+import type { PersistenceOptions } from '../persistence';
 
 namespace Messages {
   interface Message {
@@ -64,7 +65,7 @@ export class Receiver {
     }
 
     // Send spec after applying stored state
-    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec))
+    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec, this.rootReceiver.getState()))
 
     // Hook onUpdate for persistence
     this.rootReceiver.onUpdate = (update: Base.Update) => {
@@ -75,7 +76,7 @@ export class Receiver {
   }
 
   private initWithoutPersistence(): void {
-    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec))
+    this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec, this.rootReceiver.getState()))
 
     this.rootReceiver.onUpdate = (update: Base.Update) => {
       this.send(new AvControlsMessages.ControlUpdate(update))

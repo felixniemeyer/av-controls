@@ -15,6 +15,7 @@ export class RootSpecification implements Message {
   constructor(
     public name: string,
     public rootControlSpec: Base.Spec,
+    public currentState: Base.State,
   ) {}
 }
 
