@@ -10,6 +10,8 @@ export * as Modal from './modal';
 export * as Knob from './knob';
 export * as Label from './label';
 export * as Letterbox from './letterbox';
+export * as Menu from './menu';
+export * as Meter from './meter';
 export * as Pad from './pad';
 export * as PresetButton from './preset-button';
 export * as Selector from './selector';

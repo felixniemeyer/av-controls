@@ -17,10 +17,12 @@ import {
   Switch,
   Dots,
   Knob,
+  Meter,
   PresetButton,
   Tabs,
   Joystick,
-  Modal // Added Modal import
+  Modal,
+  Menu
 } from './controls';
 
 export type SpecsDict = {[id: string]: Controls.Base.Spec};
@@ -105,8 +107,12 @@ export function createSenderFromSpec(spec: Controls.Base.Spec): Base.Sender {
     return new Tabs.Sender(spec as Tabs.Spec)
     } else if(spec.type === Joystick.Spec.type) {
       return new Joystick.Sender(spec as Joystick.Spec)
-    } else if(spec.type === Modal.Spec.type) { // Added Modal case
+    } else if(spec.type === Modal.Spec.type) {
       return new Modal.Sender(spec as Modal.Spec)
+    } else if(spec.type === Menu.Spec.type) {
+      return new Menu.Sender(spec as Menu.Spec)
+    } else if(spec.type === Meter.Spec.type) {
+      return new Meter.Sender(spec as Meter.Spec)
     }
     throw new Error(`Unknown control type: ${spec.type}`)
   }
