@@ -22,7 +22,8 @@ import {
   Tabs,
   Joystick,
   Modal,
-  Menu
+  Menu,
+  Player3D
 } from './controls';
 
 export type SpecsDict = {[id: string]: Controls.Base.Spec};
@@ -113,6 +114,8 @@ export function createSenderFromSpec(spec: Controls.Base.Spec): Base.Sender {
       return new Menu.Sender(spec as Menu.Spec)
     } else if(spec.type === Meter.Spec.type) {
       return new Meter.Sender(spec as Meter.Spec)
+    } else if(spec.type === Player3D.Spec.type) {
+      return new Player3D.Sender(spec as Player3D.Spec)
     }
     throw new Error(`Unknown control type: ${spec.type}`)
   }

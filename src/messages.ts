@@ -7,6 +7,11 @@ export interface Message {
   protocol?: string;
 }
 
+export type UpdateOrigin =
+  | { kind: 'controller' }
+  | { kind: 'timeline' }
+  | { kind: 'artwork' };
+
 export class RootSpecification implements Message {
   static type = 'controller-specification' as const;
   type = RootSpecification.type;
@@ -37,6 +42,7 @@ export class ControlUpdate implements Message {
 
   constructor(
     public update: Base.Update,
+    public origin: UpdateOrigin = { kind: 'artwork' },
     public seq?: number,
   ) {}
 }
@@ -58,6 +64,8 @@ export type TimelineLane = {
   enabled: boolean;
   points: TimelinePoint[];
   seq?: number;
+  renderPoints?: TimelinePoint[];
+  renderSeq?: number;
 };
 
 export type TimelineControl = {
@@ -81,10 +89,14 @@ export type TimelineEdit =
   | { type: 'set-control-enabled'; path: string[]; enabled: boolean }
   | { type: 'set-lane-enabled'; path: string[]; laneKey: string; enabled: boolean }
   | { type: 'set-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
+  | { type: 'set-render-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
   | { type: 'add-lane'; path: string[]; lane: TimelineLane }
+  | { type: 'add-render-lane'; path: string[]; laneKey: string }
   | { type: 'remove-lane'; path: string[]; laneKey: string }
+  | { type: 'remove-render-lane'; path: string[]; laneKey: string }
   | { type: 'set-playing'; playing: boolean }
   | { type: 'set-state'; state: 'playing' | 'paused' | 'scrubbing' | 'rendering' }
+  | { type: 'render-frame' }
   | { type: 'seek'; time: number }
   | { type: 'set-always-render'; alwaysRender: boolean }
   | { type: 'set-loop-enabled'; loopEnabled: boolean }

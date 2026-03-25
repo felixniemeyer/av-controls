@@ -42,14 +42,26 @@ export class Spec extends Base.Spec {
  * Cake control receiver (display-only)
  */
 export class Receiver extends Base.Receiver {
+  public value: number;
+
   constructor(
     public spec: Spec,
   ) {
     super();
+    this.value = spec.initialState.value;
   }
 
   sendValue(value: number): void {
+    this.value = value;
     this.onUpdate(new Update(value));
+  }
+
+  getState(): State {
+    return new State(this.value);
+  }
+
+  restoreState(state: State): void {
+    this.value = state.value;
   }
 }
 

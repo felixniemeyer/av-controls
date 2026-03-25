@@ -10,7 +10,7 @@ export class TimelineClient {
   private state: TimelineState | null = null;
   private rootSpec: RootSpecification | null = null;
   private seqCounter = 0;
-  private pendingSeqs = new Map<string, number>(); // controlPath:laneKey -> seq
+  private pendingSeqs = new Map<string, number>(); // controlPath:laneKey[:render] -> seq
   private latestTimelineEditSeq = 0;
 
   public onState: ((state: TimelineState) => void) | null = null;
@@ -86,12 +86,31 @@ export class TimelineClient {
     this.sendEdit({ type: 'set-lane-points', path, laneKey, points }, seq);
   }
 
+  setRenderLanePoints(path: string[], laneKey: string, points: { t: number; v: number; kind?: 'pos' | 'ctrl' }[]) {
+    const seq = ++this.seqCounter;
+    const key = `${path.join('.')}:${laneKey}:render`;
+    this.pendingSeqs.set(key, seq);
+    this.sendEdit({ type: 'set-render-lane-points', path, laneKey, points }, seq);
+  }
+
   addLane(path: string[], lane: { key: string; enabled: boolean; points: { t: number; v: number; kind?: 'pos' | 'ctrl' }[] }) {
     this.sendEdit({ type: 'add-lane', path, lane });
   }
 
+  addRenderLane(path: string[], laneKey: string) {
+    this.sendEdit({ type: 'add-render-lane', path, laneKey });
+  }
+
   removeLane(path: string[], laneKey: string) {
     this.sendEdit({ type: 'remove-lane', path, laneKey });
+  }
+
+  removeRenderLane(path: string[], laneKey: string) {
+    this.sendEdit({ type: 'remove-render-lane', path, laneKey });
+  }
+
+  renderFrame() {
+    this.sendEdit({ type: 'render-frame' });
   }
 
   private handleMessage(message: Message) {
@@ -127,15 +146,26 @@ export class TimelineClient {
           lanes: control.lanes.map(lane => {
             const key = `${pathKey}:${lane.key}`;
             const pendingSeq = this.pendingSeqs.get(key);
+            const renderKey = `${key}:render`;
+            const pendingRenderSeq = this.pendingSeqs.get(renderKey);
+            let nextLane = lane;
             if (pendingSeq !== undefined && lane.seq === pendingSeq) {
               // This is our own edit coming back, clear the pending seq
               this.pendingSeqs.delete(key);
               // Return the lane from our current state instead (keep local version)
               const currentControl = this.state?.controls.find(c => c.path.join('.') === pathKey);
               const currentLane = currentControl?.lanes.find(l => l.key === lane.key);
-              return currentLane ?? lane;
+              nextLane = currentLane ?? lane;
             }
-            return lane;
+            if (pendingRenderSeq !== undefined && nextLane.renderSeq === pendingRenderSeq) {
+              this.pendingSeqs.delete(renderKey);
+              const currentControl = this.state?.controls.find(c => c.path.join('.') === pathKey);
+              const currentLane = currentControl?.lanes.find(l => l.key === lane.key);
+              if (currentLane) {
+                nextLane = currentLane;
+              }
+            }
+            return nextLane;
           }),
         };
       }),

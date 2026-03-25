@@ -311,7 +311,8 @@ export class Receiver extends WebSocketClient {
       this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec, rootReceiver.getState())));
 
       rootReceiver.onUpdate = (update: Base.Update) => {
-        this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update)))
+        const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
+        this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update, origin)))
         this.timelines?.[id]?.onControlUpdate(update)
         persistence?.handleUpdate(update)
       }
@@ -334,7 +335,9 @@ export class Receiver extends WebSocketClient {
             const avMessage = wsMessage.message as AvControlsMessages.ControlSignal
             const receiver = this.rootReceivers[wsMessage.panelId]
             if (receiver) {
-              receiver.handleSignal(avMessage.signal)
+              Base.Receiver.withUpdateOrigin({ kind: 'controller' }, () => {
+                receiver.handleSignal(avMessage.signal)
+              })
               this.timelines?.[wsMessage.panelId]?.onControlSignal(avMessage.signal)
             }
             break;

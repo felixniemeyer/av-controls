@@ -69,7 +69,8 @@ export class Receiver {
 
     // Hook onUpdate for persistence
     this.rootReceiver.onUpdate = (update: Base.Update) => {
-      this.send(new AvControlsMessages.ControlUpdate(update))
+      const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
+      this.send(new AvControlsMessages.ControlUpdate(update, origin))
       this.timeline?.onControlUpdate(update)
       this.persistence?.handleUpdate(update)
     }
@@ -79,7 +80,8 @@ export class Receiver {
     this.send(new AvControlsMessages.RootSpecification(this.name, this.rootReceiver.spec, this.rootReceiver.getState()))
 
     this.rootReceiver.onUpdate = (update: Base.Update) => {
-      this.send(new AvControlsMessages.ControlUpdate(update))
+      const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
+      this.send(new AvControlsMessages.ControlUpdate(update, origin))
       this.timeline?.onControlUpdate(update)
     }
   }
@@ -88,7 +90,9 @@ export class Receiver {
     const data = event.data;
     if (data.type === Messages.WrappedMessage.type) {
       if(data.message.type === AvControlsMessages.ControlSignal.type) {
-        this.rootReceiver.handleSignal((data.message as AvControlsMessages.ControlSignal).signal)
+        Base.Receiver.withUpdateOrigin({ kind: 'controller' }, () => {
+          this.rootReceiver.handleSignal((data.message as AvControlsMessages.ControlSignal).signal)
+        })
         this.timeline?.onControlSignal((data.message as AvControlsMessages.ControlSignal).signal)
       } else if(
         data.message.type === AvControlsMessages.TimelineEditMessage.type ||

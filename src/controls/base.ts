@@ -1,3 +1,5 @@
+import type { UpdateOrigin } from '../messages';
+
 // updates go from visuals to controller
 export class Update {
 }
@@ -50,6 +52,7 @@ type OnSignalCallback = (signal: Signal) => void
 type OnTouchCallback = () => void
 
 export abstract class Receiver {
+  private static updateOriginStack: UpdateOrigin[] = []
   abstract spec: Spec;
 
   public onUpdate: OnUpdateCallback = () => {}
@@ -63,6 +66,19 @@ export abstract class Receiver {
 
   // Restore state WITHOUT triggering onUpdate (avoids persistence loop)
   restoreState(_state: State): void {
+  }
+
+  static withUpdateOrigin<T>(origin: UpdateOrigin, fn: () => T): T {
+    Receiver.updateOriginStack.push(origin)
+    try {
+      return fn()
+    } finally {
+      Receiver.updateOriginStack.pop()
+    }
+  }
+
+  static currentUpdateOrigin(): UpdateOrigin | undefined {
+    return Receiver.updateOriginStack[Receiver.updateOriginStack.length - 1]
   }
 }
 
