@@ -4,7 +4,13 @@ import type {
   TimelineState,
   TimelineControl,
   TimelineLane,
+  TimelineCurveLane,
+  TimelineStepLane,
+  TimelineTriggerLane,
+  TimelineTrigger,
+  TimelineKeyframeLane,
   TimelinePoint,
+  TimelineKeyframe,
   TimelineEdit,
 } from '../messages';
 import {
@@ -12,7 +18,8 @@ import {
   TimelineEditMessage,
   TimelineRequestState,
 } from '../messages';
-import { evalLane } from './curve';
+import { evalLane, evalStepLane } from './curve';
+import { getTimelineAdapter, sortTimelineKeyframes } from './adapters';
 
 type ControlPath = string[];
 
@@ -88,6 +95,52 @@ function ensureSorted(points: TimelinePoint[]): TimelinePoint[] {
   return [...points].sort((a, b) => a.t - b.t);
 }
 
+function ensureSortedTriggers(triggers: TimelineTrigger[]): TimelineTrigger[] {
+  return [...triggers]
+    .map(trigger => ({
+      on: { t: trigger.on.t, value: trigger.on.value },
+      off: { t: trigger.off.t },
+    }))
+    .sort((a, b) => a.on.t - b.on.t);
+}
+
+function flattenTriggerLane(lane: TimelineTriggerLane): TimelinePoint[] {
+  const points: TimelinePoint[] = [];
+  for (const trigger of lane.triggers) {
+    points.push(
+      { t: trigger.on.t, v: trigger.on.value, kind: 'pos' as const },
+      { t: trigger.off.t, v: -0.5, kind: 'pos' as const },
+    );
+  }
+  return points;
+}
+
+function evalTriggerLane(lane: TimelineTriggerLane, time: number): number | null {
+  const triggers = ensureSortedTriggers(lane.triggers);
+  if (!triggers.length) return null;
+  for (const trigger of triggers) {
+    if (time < trigger.on.t) {
+      return -0.5;
+    }
+    if (time < trigger.off.t) {
+      return Math.max(0, trigger.on.value);
+    }
+  }
+  return -0.5;
+}
+
+function isBezierCurveLane(lane: TimelineLane): lane is TimelineCurveLane {
+  return lane.type !== 'keyframes' && lane.type !== 'step' && lane.type !== 'trigger';
+}
+
+function isStepLane(lane: TimelineLane): lane is TimelineStepLane {
+  return lane.type === 'step';
+}
+
+function isTriggerLane(lane: TimelineLane): lane is TimelineTriggerLane {
+  return lane.type === 'trigger';
+}
+
 function extractSignalPath(signal: Base.Signal): { path: ControlPath; leaf: any } {
   const path: string[] = [];
   let current: any = signal;
@@ -125,54 +178,6 @@ function normalizeQuaternion(values: [number, number, number, number]): [number,
   ];
 }
 
-function slerpQuaternion(
-  a: [number, number, number, number],
-  b: [number, number, number, number],
-  t: number,
-): [number, number, number, number] {
-  let ax = a[0];
-  let ay = a[1];
-  let az = a[2];
-  let aw = a[3];
-  let bx = b[0];
-  let by = b[1];
-  let bz = b[2];
-  let bw = b[3];
-
-  let dot = ax * bx + ay * by + az * bz + aw * bw;
-  if (dot < 0) {
-    dot = -dot;
-    bx = -bx;
-    by = -by;
-    bz = -bz;
-    bw = -bw;
-  }
-
-  if (dot > 0.9995) {
-    return normalizeQuaternion([
-      ax + (bx - ax) * t,
-      ay + (by - ay) * t,
-      az + (bz - az) * t,
-      aw + (bw - aw) * t,
-    ]);
-  }
-
-  const theta0 = Math.acos(Math.max(-1, Math.min(1, dot)));
-  const theta = theta0 * t;
-  const sinTheta = Math.sin(theta);
-  const sinTheta0 = Math.sin(theta0);
-
-  const s0 = Math.cos(theta) - dot * sinTheta / sinTheta0;
-  const s1 = sinTheta / sinTheta0;
-
-  return [
-    s0 * ax + s1 * bx,
-    s0 * ay + s1 * by,
-    s0 * az + s1 * bz,
-    s0 * aw + s1 * bw,
-  ];
-}
-
 function getControlValues(spec: Base.Spec, payload: any): Record<string, number> {
   const current: Record<string, number> = {};
   if (!payload || typeof payload !== 'object') return current;
@@ -183,7 +188,18 @@ function getControlValues(spec: Base.Spec, payload: any): Record<string, number>
     return current;
   }
   if (spec.type === Controls.Switch.Spec.type) {
-    if (typeof payload.on === 'boolean') current.on = payload.on ? 1 : 0;
+    if (typeof payload.on === 'boolean') current.on = payload.on ? 0 : -1;
+    return current;
+  }
+  if (spec.type === Controls.ConfirmSwitch.Spec.type) {
+    if (typeof payload.on === 'boolean') current.on = payload.on ? 0 : -1;
+    return current;
+  }
+  if (spec.type === Controls.Pad.Spec.type) {
+    if (typeof payload.pressed === 'boolean') {
+      const velocity = isNumber(payload.velocity) ? payload.velocity : (payload.pressed ? 1 : 0);
+      current.value = payload.pressed ? Math.max(0, velocity) : -1;
+    }
     return current;
   }
   if (spec.type === Controls.Selector.Spec.type) {
@@ -214,7 +230,13 @@ function getLaneValueMap(spec: Base.Spec, currentValues: Record<string, number>,
     };
   }
   if (spec.type === Controls.Switch.Spec.type) {
-    return { on: laneValues.on ?? laneValues.value ?? currentValues.on ?? 0 };
+    return { on: laneValues.on ?? laneValues.value ?? currentValues.on ?? -1 };
+  }
+  if (spec.type === Controls.ConfirmSwitch.Spec.type) {
+    return { on: laneValues.on ?? laneValues.value ?? currentValues.on ?? -1 };
+  }
+  if (spec.type === Controls.Pad.Spec.type) {
+    return { value: laneValues.value ?? currentValues.value ?? -1 };
   }
   if (spec.type === Controls.Selector.Spec.type) {
     return { index: laneValues.index ?? laneValues.value ?? currentValues.index ?? 0 };
@@ -233,13 +255,33 @@ function getLaneValueMap(spec: Base.Spec, currentValues: Record<string, number>,
   return { value: laneValues.value ?? currentValues.value ?? 0 };
 }
 
-function getSpecRange(spec: Base.Spec): { min?: number; max?: number } {
+function didTriggerStateChange(spec: Base.Spec, previousValues: Record<string, number>, nextValues: Record<string, number>) {
+  if (spec.type === Controls.Switch.Spec.type || spec.type === Controls.ConfirmSwitch.Spec.type) {
+    const prev = previousValues.on ?? previousValues.value ?? -1;
+    const next = nextValues.on ?? nextValues.value ?? -1;
+    return (prev >= 0) !== (next >= 0);
+  }
+  if (spec.type === Controls.Pad.Spec.type) {
+    const prev = previousValues.value ?? -1;
+    const next = nextValues.value ?? -1;
+    return Math.abs(prev - next) > 1e-6;
+  }
+  return true;
+}
+
+function getSpecRange(spec: Base.Spec): { min?: number; max?: number; wrap?: boolean } {
   if (spec.type === Controls.Fader.Spec.type || spec.type === Controls.Knob.Spec.type) {
-    const s = spec as Controls.Fader.Spec;
-    return { min: s.min, max: s.max };
+    const s = spec as Controls.Fader.Spec | Controls.Knob.Spec;
+    return { min: s.min, max: s.max, wrap: 'wrap' in s ? s.wrap : false };
   }
   if (spec.type === Controls.Switch.Spec.type) {
-    return { min: 0, max: 1 };
+    return { min: -1 };
+  }
+  if (spec.type === Controls.ConfirmSwitch.Spec.type) {
+    return { min: -1 };
+  }
+  if (spec.type === Controls.Pad.Spec.type) {
+    return { min: -1 };
   }
   if (spec.type === Controls.Selector.Spec.type) {
     const s = spec as Controls.Selector.Spec;
@@ -266,7 +308,24 @@ function applyLaneValues(receiver: Base.Receiver, spec: Base.Spec, values: Recor
     if (spec.type === Controls.Switch.Spec.type) {
       const on = values.on ?? values.value;
       if (isNumber(on)) {
-        receiver.handleSignal({ on: on >= 0.5 });
+        receiver.handleSignal({ on: on >= 0 });
+      }
+      return;
+    }
+    if (spec.type === Controls.ConfirmSwitch.Spec.type) {
+      const on = values.on ?? values.value;
+      if (isNumber(on)) {
+        receiver.handleSignal({ on: on >= 0 });
+      }
+      return;
+    }
+    if (spec.type === Controls.Pad.Spec.type) {
+      const value = values.value ?? -1;
+      if (isNumber(value)) {
+        receiver.handleSignal({
+          pressed: value >= 0,
+          velocity: value >= 0 ? Math.max(0, value) : 0,
+        });
       }
       return;
     }
@@ -302,80 +361,24 @@ function applyLaneValues(receiver: Base.Receiver, spec: Base.Spec, values: Recor
   });
 }
 
-function getQuaternionLaneValue(
-  state: ControlAutomationState,
-  laneKey: 'qx' | 'qy' | 'qz' | 'qw',
-  time: number,
-  useRenderLanes: boolean,
-): number | null {
-  const lane = state.lanes.find(candidate => candidate.key === laneKey);
-  if (!lane) return null;
-  const points = useRenderLanes && lane.renderPoints !== undefined ? lane.renderPoints : lane.points;
-  return evalLane(points, time, 32, -1, 1);
-}
-
-function getQuaternionAtTime(
-  state: ControlAutomationState,
-  time: number,
-  useRenderLanes: boolean,
-  fallback: [number, number, number, number],
-): [number, number, number, number] {
-  const lanes = ['qx', 'qy', 'qz', 'qw'] as const;
-  const keyTimes = new Set<number>();
-
-  for (const laneKey of lanes) {
-    const lane = state.lanes.find(candidate => candidate.key === laneKey);
-    if (!lane) continue;
-    const points = useRenderLanes && lane.renderPoints !== undefined ? lane.renderPoints : lane.points;
-    for (const point of points) {
-      if ((point.kind ?? 'pos') === 'pos') {
-        keyTimes.add(point.t);
-      }
+function applyTimelinePayload(receiver: Base.Receiver, spec: Base.Spec, payload: unknown) {
+  Base.Receiver.withUpdateOrigin({ kind: 'timeline' }, () => {
+    if (spec.type === Controls.Player3D.Spec.type) {
+      const value = payload as Controls.Player3D.State | Controls.Player3D.Signal;
+      receiver.handleSignal({
+        position: value.position,
+        rotation: normalizeQuaternion(value.rotation),
+      });
+      return;
     }
-  }
-
-  if (keyTimes.size === 0) {
-    return fallback;
-  }
-
-  const sortedTimes = Array.from(keyTimes).sort((a, b) => a - b);
-  const first = sortedTimes[0]!;
-  const last = sortedTimes[sortedTimes.length - 1]!;
-
-  const sampleQuaternion = (sampleTime: number) => normalizeQuaternion([
-    getQuaternionLaneValue(state, 'qx', sampleTime, useRenderLanes) ?? fallback[0],
-    getQuaternionLaneValue(state, 'qy', sampleTime, useRenderLanes) ?? fallback[1],
-    getQuaternionLaneValue(state, 'qz', sampleTime, useRenderLanes) ?? fallback[2],
-    getQuaternionLaneValue(state, 'qw', sampleTime, useRenderLanes) ?? fallback[3],
-  ]);
-
-  if (time <= first) {
-    return sampleQuaternion(first);
-  }
-  if (time >= last) {
-    return sampleQuaternion(last);
-  }
-
-  let previousTime = first;
-  let nextTime = last;
-  for (let i = 0; i < sortedTimes.length - 1; i++) {
-    const a = sortedTimes[i]!;
-    const b = sortedTimes[i + 1]!;
-    if (time >= a && time <= b) {
-      previousTime = a;
-      nextTime = b;
-      break;
+    if (spec.type === Controls.Dots.Spec.type) {
+      const value = payload as Controls.Dots.State | Controls.Dots.Update;
+      receiver.handleSignal({
+        type: 'full',
+        dots: value.values.map(dot => [dot[0], dot[1]]),
+      });
     }
-  }
-
-  if (nextTime <= previousTime) {
-    return sampleQuaternion(previousTime);
-  }
-
-  const from = sampleQuaternion(previousTime);
-  const to = sampleQuaternion(nextTime);
-  const factor = (time - previousTime) / (nextTime - previousTime);
-  return slerpQuaternion(from, to, factor);
+  });
 }
 
 export class Timeline {
@@ -398,6 +401,8 @@ export class Timeline {
     && new URLSearchParams(window.location.search).get('timeline-debug-verbose') === '1';
   private _logTimeEachFrame = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('timeline-log-time') === '1';
+  private _triggerLog = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-trigger-log') === '1';
   private _debugLastAt = 0;
   private _debugFrames = 0;
 
@@ -410,6 +415,7 @@ export class Timeline {
   private _onRender: ((timeContext: TimeContext) => void | Promise<void>) | null = null;
   private controlChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private controlChangeDebounceMs = 500;
+  private stateSeq = 0;
 
   public onMessage: ((message: any) => void) | null = null;
 
@@ -606,6 +612,9 @@ export class Timeline {
     this.time = Math.max(0, time);
     this.lastDelta = 0;
     this.applyAutomation();
+    if (!this.alwaysRender && this.timelineState === 'scrubbing') {
+      this.requestRender();
+    }
     this._logVerbose(`seek now=${this.time.toFixed(3)}`);
   }
 
@@ -684,7 +693,16 @@ export class Timeline {
       if (isNumber(value)) current.value = value;
     } else if (entry.spec.type === Controls.Switch.Spec.type) {
       const on = (leaf as any)?.on;
-      if (typeof on === 'boolean') current.on = on ? 1 : 0;
+      if (typeof on === 'boolean') current.on = on ? 0 : -1;
+    } else if (entry.spec.type === Controls.ConfirmSwitch.Spec.type) {
+      const on = (leaf as any)?.on;
+      if (typeof on === 'boolean') current.on = on ? 0 : -1;
+    } else if (entry.spec.type === Controls.Pad.Spec.type) {
+      const pressed = (leaf as any)?.pressed;
+      if (typeof pressed === 'boolean') {
+        const velocity = isNumber((leaf as any)?.velocity) ? (leaf as any).velocity : (pressed ? 1 : 0);
+        current.value = pressed ? Math.max(0, velocity) : -1;
+      }
     } else if (entry.spec.type === Controls.Joystick.Spec.type) {
       const x = (leaf as any)?.x;
       const y = (leaf as any)?.y;
@@ -697,6 +715,16 @@ export class Timeline {
       if (isNumber(index)) current.index = index;
     }
     this.lastValues.set(key, current);
+    if (this._triggerLog) {
+      const adapter = getTimelineAdapter(entry.spec);
+      if (adapter.kind === 'trigger') {
+        console.info('[timeline:trigger:update]', {
+          path: key,
+          update,
+          current,
+        });
+      }
+    }
   }
 
   private buildIndex() {
@@ -743,8 +771,39 @@ export class Timeline {
       case 'set-lane-points': {
         const state = this.ensureControlState(edit.path);
         const lane = state.lanes.find(l => l.key === edit.laneKey);
-        if (lane) {
+        if (lane && lane.type !== 'keyframes' && lane.type !== 'trigger') {
           lane.points = ensureSorted(edit.points);
+          if (seq !== undefined) lane.seq = seq;
+        }
+        break;
+      }
+      case 'set-lane-triggers': {
+        const state = this.ensureControlState(edit.path);
+        const lane = state.lanes.find(l => l.key === edit.laneKey);
+        if (lane && lane.type === 'trigger') {
+          lane.triggers = ensureSortedTriggers(edit.triggers);
+          if (seq !== undefined) lane.seq = seq;
+          if (this._triggerLog) {
+            console.info('[timeline:trigger:apply-edit]', {
+              path: edit.path.join('.'),
+              laneKey: edit.laneKey,
+              seq,
+              triggerCount: lane.triggers.length,
+              triggers: lane.triggers.map(trigger => ({
+                onT: trigger.on.t,
+                onValue: trigger.on.value,
+                offT: trigger.off.t,
+              })),
+            });
+          }
+        }
+        break;
+      }
+      case 'set-lane-keyframes': {
+        const state = this.ensureControlState(edit.path);
+        const lane = state.lanes.find(l => l.key === edit.laneKey);
+        if (lane && lane.type === 'keyframes') {
+          lane.keyframes = sortTimelineKeyframes(edit.keyframes);
           if (seq !== undefined) lane.seq = seq;
         }
         break;
@@ -752,7 +811,7 @@ export class Timeline {
       case 'set-render-lane-points': {
         const state = this.ensureControlState(edit.path);
         const lane = state.lanes.find(l => l.key === edit.laneKey);
-        if (lane) {
+        if (lane && isBezierCurveLane(lane)) {
           lane.renderPoints = ensureSorted(edit.points);
           if (seq !== undefined) lane.renderSeq = seq;
         }
@@ -762,17 +821,43 @@ export class Timeline {
         const state = this.ensureControlState(edit.path);
         const exists = state.lanes.find(l => l.key === edit.lane.key);
         if (!exists) {
-          state.lanes.push({
-            ...edit.lane,
-            points: ensureSorted(edit.lane.points ?? []),
-          });
+          if (edit.lane.type === 'keyframes') {
+            state.lanes.push({
+              ...edit.lane,
+              keyframes: sortTimelineKeyframes(edit.lane.keyframes ?? []),
+            });
+          } else if (edit.lane.type === 'step' || edit.lane.type === 'trigger') {
+            if (edit.lane.type === 'trigger') {
+              state.lanes.push({
+                ...edit.lane,
+                triggers: ensureSortedTriggers(edit.lane.triggers ?? []),
+              });
+              if (this._triggerLog) {
+                console.info('[timeline:trigger:add-lane]', {
+                  path: edit.path.join('.'),
+                  laneKey: edit.lane.key,
+                  triggerCount: edit.lane.triggers?.length ?? 0,
+                });
+              }
+            } else {
+              state.lanes.push({
+                ...edit.lane,
+                points: ensureSorted(edit.lane.points ?? []),
+              });
+            }
+          } else {
+            state.lanes.push({
+              ...edit.lane,
+              points: ensureSorted(edit.lane.points ?? []),
+            });
+          }
         }
         break;
       }
       case 'add-render-lane': {
         const state = this.ensureControlState(edit.path);
         const lane = state.lanes.find(l => l.key === edit.laneKey);
-        if (lane && lane.renderPoints === undefined) {
+        if (lane && isBezierCurveLane(lane) && lane.renderPoints === undefined) {
           lane.renderPoints = [];
         }
         break;
@@ -785,7 +870,7 @@ export class Timeline {
       case 'remove-render-lane': {
         const state = this.ensureControlState(edit.path);
         const lane = state.lanes.find(l => l.key === edit.laneKey);
-        if (lane) {
+        if (lane && isBezierCurveLane(lane)) {
           delete lane.renderPoints;
           delete lane.renderSeq;
         }
@@ -837,41 +922,72 @@ export class Timeline {
       if (!state.enabled || state.manualOverride) continue;
       const entry = this.controlIndex.get(key);
       if (!entry) continue;
+      const adapter = getTimelineAdapter(entry.spec);
+
+      if (adapter.kind === 'keyframes') {
+        const lane = state.lanes.find(candidate => candidate.enabled && candidate.type === 'keyframes');
+        if (!lane || !adapter.evaluateKeyframes) continue;
+        const payload = adapter.evaluateKeyframes(lane, this.time);
+        if (payload === null || payload === undefined) continue;
+        applyTimelinePayload(entry.receiver, entry.spec, payload);
+        this.lastValues.set(key, getControlValues(entry.spec, payload));
+        continue;
+      }
 
       const laneValues: Record<string, number> = {};
       const range = getSpecRange(entry.spec);
       for (const lane of state.lanes) {
-        if (!lane.enabled) continue;
-        const points = useRenderLanes && lane.renderPoints !== undefined
-          ? lane.renderPoints
-          : lane.points;
-        const value = evalLane(points, this.time, 32, range.min, range.max);
+        if (!lane.enabled || lane.type === 'keyframes') continue;
+        const value = lane.type === 'trigger'
+          ? evalTriggerLane(lane, this.time)
+          : (() => {
+              const points = isBezierCurveLane(lane) && useRenderLanes && lane.renderPoints !== undefined
+                ? lane.renderPoints
+                : lane.points;
+              return adapter.kind === 'step' || isStepLane(lane)
+                ? evalStepLane(points, this.time, range.min, range.max)
+                : evalLane(points, this.time, 32, range.min, range.max, range.wrap ?? false);
+            })();
         if (value === null) continue;
         laneValues[lane.key] = value;
       }
       if (Object.keys(laneValues).length === 0) continue;
 
-      if (entry.spec.type === Controls.Player3D.Spec.type) {
-        const currentValues = this.lastValues.get(key) ?? {};
-        const quaternion = getQuaternionAtTime(
-          state,
-          this.time,
-          useRenderLanes,
-          normalizeQuaternion([
-            currentValues.qx ?? 0,
-            currentValues.qy ?? 0,
-            currentValues.qz ?? 0,
-            currentValues.qw ?? 1,
-          ]),
-        );
-        laneValues.qx = quaternion[0];
-        laneValues.qy = quaternion[1];
-        laneValues.qz = quaternion[2];
-        laneValues.qw = quaternion[3];
+      const previousValues = this.lastValues.get(key) ?? {};
+      const mapped = getLaneValueMap(entry.spec, previousValues, laneValues);
+      if (this._triggerLog && adapter.kind === 'trigger') {
+        console.info('[timeline:trigger:evaluate]', {
+          path: key,
+          time: this.time,
+          state: this.timelineState,
+          lanes: state.lanes
+            .filter(lane => lane.enabled && lane.type === 'trigger')
+            .map(lane => ({
+              laneKey: lane.key,
+              evaluated: laneValues[lane.key],
+              triggers: lane.triggers.map(trigger => ({
+                onT: trigger.on.t,
+                onValue: trigger.on.value,
+                offT: trigger.off.t,
+              })),
+            })),
+          previousValues,
+          mapped,
+        });
       }
-
-      const mapped = getLaneValueMap(entry.spec, this.lastValues.get(key) ?? {}, laneValues);
+      if (adapter.kind === 'trigger' && !didTriggerStateChange(entry.spec, previousValues, mapped)) {
+        this.lastValues.set(key, mapped);
+        continue;
+      }
       applyLaneValues(entry.receiver, entry.spec, mapped);
+      if (this._triggerLog && adapter.kind === 'trigger') {
+        console.info('[timeline:trigger:emit]', {
+          path: key,
+          time: this.time,
+          mapped,
+        });
+      }
+      this.lastValues.set(key, mapped);
     }
   }
 
@@ -887,11 +1003,31 @@ export class Timeline {
         path: [...control.path],
         enabled: control.enabled,
         manualOverride: control.manualOverride,
-        lanes: control.lanes.map(lane => ({
-          ...lane,
-          points: [...lane.points],
-          renderPoints: lane.renderPoints ? [...lane.renderPoints] : undefined,
-        })),
+        lanes: control.lanes.map(lane => {
+          if (lane.type === 'keyframes') {
+            return {
+              ...lane,
+              keyframes: lane.keyframes.map((keyframe: TimelineKeyframe) => ({
+                ...keyframe,
+                value: JSON.parse(JSON.stringify(keyframe.value)),
+              })),
+            };
+          }
+          return {
+            ...lane,
+            ...(lane.type === 'trigger'
+              ? {
+                  triggers: lane.triggers.map(trigger => ({
+                    on: { ...trigger.on },
+                    off: { ...trigger.off },
+                  })),
+                }
+              : {
+                  points: [...lane.points],
+                  renderPoints: isBezierCurveLane(lane) && lane.renderPoints !== undefined ? [...lane.renderPoints] : undefined,
+                }),
+          };
+        }),
       })),
     };
   }
@@ -899,7 +1035,7 @@ export class Timeline {
   private sendState(seq?: number) {
     if (!this.onMessage) return;
     const state = this.buildStateSnapshot();
-    this.onMessage(new TimelineStateMessage(state, seq));
+    this.onMessage(new TimelineStateMessage(state, seq, ++this.stateSeq));
   }
 
   getState(): TimelineState {
@@ -911,10 +1047,17 @@ export type {
   TimelineState,
   TimelineControl,
   TimelineLane,
+  TimelineCurveLane,
+  TimelineStepLane,
+  TimelineTrigger,
+  TimelineTriggerLane,
+  TimelineKeyframeLane,
   TimelinePoint,
+  TimelineKeyframe,
   TimelineEdit,
   TimelineOptions,
 };
 
 export * from './client';
 export * from './curve';
+export * from './adapters';

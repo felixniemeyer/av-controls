@@ -28,6 +28,7 @@ namespace Messages {
 export class Receiver {
   private persistence: StatePersistence | null = null
   public ready: Promise<void>
+  private boundHandlePostMessage: (event: MessageEvent) => void
 
   constructor(
     private otherWindow: Window,
@@ -36,8 +37,8 @@ export class Receiver {
     private timeline?: Timeline,
     persistenceOptions?: PersistenceOptions,
   ) {
-    this.handlePostMessage = this.handlePostMessage.bind(this);
-    window.addEventListener('message', this.handlePostMessage.bind(this));
+    this.boundHandlePostMessage = this.handlePostMessage.bind(this);
+    window.addEventListener('message', this.boundHandlePostMessage);
 
     if (this.timeline) {
       this.timeline.onMessage = (message: AvControlsMessages.Message) => {
@@ -110,6 +111,10 @@ export class Receiver {
       Logger.error('Failed to send message', { error, message });
       throw new CommunicationError(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  dispose(): void {
+    window.removeEventListener('message', this.boundHandlePostMessage)
   }
 }
 

@@ -59,14 +59,58 @@ export type TimelinePoint = {
   kind?: 'pos' | 'ctrl';
 };
 
-export type TimelineLane = {
+export type TimelineKeyframe = {
+  t: number;
+  value: unknown;
+  leftSmooth?: number;
+  rightSmooth?: number;
+};
+
+export type TimelineCurveLane = {
   key: string;
+  type?: 'curve';
   enabled: boolean;
   points: TimelinePoint[];
   seq?: number;
   renderPoints?: TimelinePoint[];
   renderSeq?: number;
 };
+
+export type TimelineStepLane = {
+  key: string;
+  type: 'step';
+  enabled: boolean;
+  points: TimelinePoint[];
+  seq?: number;
+};
+
+export type TimelineTrigger = {
+  on: {
+    t: number;
+    value: number;
+  };
+  off: {
+    t: number;
+  };
+};
+
+export type TimelineTriggerLane = {
+  key: string;
+  type: 'trigger';
+  enabled: boolean;
+  triggers: TimelineTrigger[];
+  seq?: number;
+};
+
+export type TimelineKeyframeLane = {
+  key: string;
+  type: 'keyframes';
+  enabled: boolean;
+  keyframes: TimelineKeyframe[];
+  seq?: number;
+};
+
+export type TimelineLane = TimelineCurveLane | TimelineStepLane | TimelineTriggerLane | TimelineKeyframeLane;
 
 export type TimelineControl = {
   path: string[];
@@ -89,6 +133,8 @@ export type TimelineEdit =
   | { type: 'set-control-enabled'; path: string[]; enabled: boolean }
   | { type: 'set-lane-enabled'; path: string[]; laneKey: string; enabled: boolean }
   | { type: 'set-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
+  | { type: 'set-lane-triggers'; path: string[]; laneKey: string; triggers: TimelineTrigger[] }
+  | { type: 'set-lane-keyframes'; path: string[]; laneKey: string; keyframes: TimelineKeyframe[] }
   | { type: 'set-render-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
   | { type: 'add-lane'; path: string[]; lane: TimelineLane }
   | { type: 'add-render-lane'; path: string[]; laneKey: string }
@@ -109,6 +155,7 @@ export class TimelineStateMessage implements Message {
   constructor(
     public state: TimelineState,
     public seq?: number,
+    public stateSeq?: number,
   ) {}
 }
 

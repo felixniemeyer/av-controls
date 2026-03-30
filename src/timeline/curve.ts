@@ -1,6 +1,7 @@
 import type { TimelinePoint } from '../messages';
 
 type Point2 = { t: number; v: number };
+type WrapOptions = { min: number; max: number; wrap: true } | { min?: number; max?: number; wrap?: false };
 
 function isPos(point: TimelinePoint) {
   return (point.kind ?? 'pos') === 'pos';
@@ -33,6 +34,28 @@ function clampValue(value: number, min?: number, max?: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function wrapValue(value: number, min: number, max: number) {
+  const range = max - min;
+  if (!Number.isFinite(range) || range <= 0) return value;
+  return ((((value - min) % range) + range) % range) + min;
+}
+
+function shortestWrappedDelta(from: number, to: number, min: number, max: number) {
+  const range = max - min;
+  if (!Number.isFinite(range) || range <= 0) return to - from;
+  let delta = (to - from) % range;
+  if (delta > range / 2) delta -= range;
+  if (delta < -range / 2) delta += range;
+  return delta;
+}
+
+function mapValueForOutput(value: number, options?: WrapOptions) {
+  if (options?.wrap && options.min !== undefined && options.max !== undefined) {
+    return wrapValue(value, options.min, options.max);
+  }
+  return clampValue(value, options?.min, options?.max);
+}
+
 function buildSegments(points: TimelinePoint[]) {
   const sorted = sortByTime(points);
   const segments: TimelinePoint[][] = [];
@@ -59,34 +82,67 @@ function segmentToBezierPoints(segment: TimelinePoint[]) {
   return points;
 }
 
-export function sampleLane(points: TimelinePoint[], samplesPerSegment = 32, min?: number, max?: number): Point2[] {
+function segmentToWrappedBezierPoints(segment: TimelinePoint[], min: number, max: number) {
+  const points: Point2[] = [];
+  let previousValue: number | null = null;
+  for (const point of segment) {
+    if (previousValue === null) {
+      previousValue = point.v;
+      points.push({ t: point.t, v: point.v });
+      continue;
+    }
+    const nextValue: number = previousValue + shortestWrappedDelta(previousValue, point.v, min, max);
+    points.push({ t: point.t, v: nextValue });
+    previousValue = nextValue;
+  }
+  return points;
+}
+
+export function sampleLane(points: TimelinePoint[], samplesPerSegment = 32, min?: number, max?: number, wrap = false): Point2[] {
   if (points.length === 0) return [];
   const segments = buildSegments(points);
   if (!segments.length) return [];
   const samples: Point2[] = [];
+  const wrapOptions: WrapOptions = wrap && min !== undefined && max !== undefined
+    ? { min, max, wrap: true }
+    : { min, max, wrap: false };
   for (const segment of segments) {
     if (segment.length === 2) {
-      samples.push({ t: segment[0]!.t, v: clampValue(segment[0]!.v, min, max) });
-      samples.push({ t: segment[1]!.t, v: clampValue(segment[1]!.v, min, max) });
+      const start = segment[0]!;
+      const end = segment[1]!;
+      samples.push({ t: start.t, v: mapValueForOutput(start.v, wrapOptions) });
+      if (wrapOptions.wrap) {
+        samples.push({
+          t: end.t,
+          v: mapValueForOutput(start.v + shortestWrappedDelta(start.v, end.v, min!, max!), wrapOptions),
+        });
+      } else {
+        samples.push({ t: end.t, v: mapValueForOutput(end.v, wrapOptions) });
+      }
       continue;
     }
-    const controlPoints = segmentToBezierPoints(segment);
+    const controlPoints = wrapOptions.wrap
+      ? segmentToWrappedBezierPoints(segment, min!, max!)
+      : segmentToBezierPoints(segment);
     for (let i = 0; i <= samplesPerSegment; i++) {
       const t = i / samplesPerSegment;
       const sample = deCasteljau(controlPoints, t);
-      samples.push({ t: sample.t, v: clampValue(sample.v, min, max) });
+      samples.push({ t: sample.t, v: mapValueForOutput(sample.v, wrapOptions) });
     }
   }
   return samples.sort((a, b) => a.t - b.t);
 }
 
-export function evalLane(points: TimelinePoint[], time: number, samplesPerSegment = 32, min?: number, max?: number): number | null {
+export function evalLane(points: TimelinePoint[], time: number, samplesPerSegment = 32, min?: number, max?: number, wrap = false): number | null {
   if (!points.length) return null;
   const sorted = sortByTime(points);
-  if (sorted.length === 1) return clampValue(sorted[0]!.v, min, max);
-  if (time <= sorted[0]!.t) return clampValue(sorted[0]!.v, min, max);
+  const wrapOptions: WrapOptions = wrap && min !== undefined && max !== undefined
+    ? { min, max, wrap: true }
+    : { min, max, wrap: false };
+  if (sorted.length === 1) return mapValueForOutput(sorted[0]!.v, wrapOptions);
+  if (time <= sorted[0]!.t) return mapValueForOutput(sorted[0]!.v, wrapOptions);
   const last = sorted[sorted.length - 1]!;
-  if (time >= last.t) return clampValue(last.v, min, max);
+  if (time >= last.t) return mapValueForOutput(last.v, wrapOptions);
 
   const segments = buildSegments(sorted);
   for (const segment of segments) {
@@ -95,23 +151,42 @@ export function evalLane(points: TimelinePoint[], time: number, samplesPerSegmen
     if (time < start.t || time > end.t) continue;
     if (segment.length === 2) {
       const span = end.t - start.t;
-      if (span <= 0) return clampValue(start.v, min, max);
+      if (span <= 0) return mapValueForOutput(start.v, wrapOptions);
       const factor = (time - start.t) / span;
-      return clampValue(start.v + (end.v - start.v) * factor, min, max);
+      if (wrapOptions.wrap) {
+        const delta = shortestWrappedDelta(start.v, end.v, min!, max!);
+        return mapValueForOutput(start.v + delta * factor, wrapOptions);
+      }
+      return mapValueForOutput(start.v + (end.v - start.v) * factor, wrapOptions);
     }
-    const samples = sampleLane(segment, samplesPerSegment, min, max);
+    const samples = sampleLane(segment, samplesPerSegment, min, max, wrap);
     for (let i = 0; i < samples.length - 1; i++) {
       const a = samples[i]!;
       const b = samples[i + 1]!;
       if (time >= a.t && time <= b.t) {
         const span = b.t - a.t;
-        if (span <= 0) return clampValue(a.v, min, max);
+        if (span <= 0) return mapValueForOutput(a.v, wrapOptions);
         const factor = (time - a.t) / span;
-        return clampValue(a.v + (b.v - a.v) * factor, min, max);
+        if (wrapOptions.wrap) {
+          const delta = shortestWrappedDelta(a.v, b.v, min!, max!);
+          return mapValueForOutput(a.v + delta * factor, wrapOptions);
+        }
+        return mapValueForOutput(a.v + (b.v - a.v) * factor, wrapOptions);
       }
     }
   }
   return null;
+}
+
+export function evalStepLane(points: TimelinePoint[], time: number, min?: number, max?: number): number | null {
+  if (!points.length) return null;
+  const sorted = sortByTime(points);
+  let current = sorted[0]!;
+  for (const point of sorted) {
+    if (point.t > time) break;
+    current = point;
+  }
+  return clampValue(current.v, min, max);
 }
 
 export function ensureLaneHasPos(points: TimelinePoint[]) {

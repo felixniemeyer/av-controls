@@ -1,4 +1,4 @@
-import { type Message, ControlUpdate, RootSpecification, TimelineEditMessage, TimelineRequestState, TimelineStateMessage } from '../messages';
+import { type Message, ControlUpdate, RootSpecification, TimelineEditMessage, TimelineRequestState, TimelineStateMessage, type TimelineLane } from '../messages';
 import type { TimelineEdit, TimelineState } from './index';
 import type { Sender as TransportSender } from '../transports/base';
 
@@ -12,6 +12,12 @@ export class TimelineClient {
   private seqCounter = 0;
   private pendingSeqs = new Map<string, number>(); // controlPath:laneKey[:render] -> seq
   private latestTimelineEditSeq = 0;
+  private latestStateSeq = 0;
+  private pendingTransportState: { seq: number; state: TimelineState['state']; playing: boolean } | null = null;
+  private triggerLog = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-trigger-log') === '1';
+  private stateLog = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-state-log') === '1';
 
   public onState: ((state: TimelineState) => void) | null = null;
   public onRootSpec: ((spec: RootSpecification) => void) | null = null;
@@ -48,11 +54,23 @@ export class TimelineClient {
   }
 
   setPlaying(playing: boolean) {
-    this.sendEdit({ type: 'set-playing', playing });
+    const seq = ++this.seqCounter;
+    this.pendingTransportState = {
+      seq,
+      state: playing ? 'playing' : 'paused',
+      playing,
+    };
+    this.sendEdit({ type: 'set-playing', playing }, seq);
   }
 
   setState(state: 'playing' | 'paused' | 'scrubbing' | 'rendering') {
-    this.sendEdit({ type: 'set-state', state });
+    const seq = ++this.seqCounter;
+    this.pendingTransportState = {
+      seq,
+      state,
+      playing: state === 'playing',
+    };
+    this.sendEdit({ type: 'set-state', state }, seq);
   }
 
   seek(time: number) {
@@ -86,6 +104,32 @@ export class TimelineClient {
     this.sendEdit({ type: 'set-lane-points', path, laneKey, points }, seq);
   }
 
+  setLaneTriggers(path: string[], laneKey: string, triggers: { on: { t: number; value: number }; off: { t: number } }[]) {
+    const seq = ++this.seqCounter;
+    const key = `${path.join('.')}:${laneKey}`;
+    this.pendingSeqs.set(key, seq);
+    if (this.triggerLog) {
+      console.info('[timeline:trigger:edit]', {
+        path: path.join('.'),
+        laneKey,
+        seq,
+        triggers: triggers.map(trigger => ({
+          onT: trigger.on.t,
+          onValue: trigger.on.value,
+          offT: trigger.off.t,
+        })),
+      });
+    }
+    this.sendEdit({ type: 'set-lane-triggers', path, laneKey, triggers }, seq);
+  }
+
+  setLaneKeyframes(path: string[], laneKey: string, keyframes: { t: number; value: unknown; leftSmooth?: number; rightSmooth?: number }[]) {
+    const seq = ++this.seqCounter;
+    const key = `${path.join('.')}:${laneKey}`;
+    this.pendingSeqs.set(key, seq);
+    this.sendEdit({ type: 'set-lane-keyframes', path, laneKey, keyframes }, seq);
+  }
+
   setRenderLanePoints(path: string[], laneKey: string, points: { t: number; v: number; kind?: 'pos' | 'ctrl' }[]) {
     const seq = ++this.seqCounter;
     const key = `${path.join('.')}:${laneKey}:render`;
@@ -93,7 +137,7 @@ export class TimelineClient {
     this.sendEdit({ type: 'set-render-lane-points', path, laneKey, points }, seq);
   }
 
-  addLane(path: string[], lane: { key: string; enabled: boolean; points: { t: number; v: number; kind?: 'pos' | 'ctrl' }[] }) {
+  addLane(path: string[], lane: TimelineLane) {
     this.sendEdit({ type: 'add-lane', path, lane });
   }
 
@@ -116,16 +160,90 @@ export class TimelineClient {
   private handleMessage(message: Message) {
     if (message.type === RootSpecification.type) {
       this.rootSpec = message as RootSpecification;
+      this.latestStateSeq = 0;
       this.onRootSpec?.(this.rootSpec);
       return;
     }
     if (message.type === TimelineStateMessage.type) {
       const payload = message as TimelineStateMessage;
+      if (typeof payload.stateSeq === 'number') {
+        if (payload.stateSeq < this.latestStateSeq) {
+          return;
+        }
+        this.latestStateSeq = payload.stateSeq;
+      }
       if (typeof payload.seq === 'number' && payload.seq < this.latestTimelineEditSeq) {
         // Stale state echo from an older timeline edit.
         return;
       }
+      if (this.pendingTransportState) {
+        const matchesPending = payload.state.state === this.pendingTransportState.state
+          && payload.state.playing === this.pendingTransportState.playing;
+        const acknowledgesOrSupersedes = typeof payload.seq === 'number'
+          && payload.seq >= this.pendingTransportState.seq;
+
+        if (matchesPending) {
+          if (this.stateLog) {
+            console.info('[timeline:state-pending]', {
+              action: 'accept-matching',
+              pending: this.pendingTransportState,
+              incomingSeq: payload.seq,
+              incomingStateSeq: payload.stateSeq,
+              state: payload.state.state,
+              playing: payload.state.playing,
+            });
+          }
+          this.pendingTransportState = null;
+        } else if (!acknowledgesOrSupersedes) {
+          if (this.stateLog) {
+            console.info('[timeline:state-pending]', {
+              action: 'drop-contradicting',
+              pending: this.pendingTransportState,
+              incomingSeq: payload.seq,
+              incomingStateSeq: payload.stateSeq,
+              state: payload.state.state,
+              playing: payload.state.playing,
+            });
+          }
+          return;
+        } else {
+          if (this.stateLog) {
+            console.info('[timeline:state-pending]', {
+              action: 'accept-superseding',
+              pending: this.pendingTransportState,
+              incomingSeq: payload.seq,
+              incomingStateSeq: payload.stateSeq,
+              state: payload.state.state,
+              playing: payload.state.playing,
+            });
+          }
+          this.pendingTransportState = null;
+        }
+      }
       const filteredState = this.filterOwnEdits(payload.state);
+      if (this.triggerLog) {
+        const triggerControls = filteredState.controls
+          .flatMap(control => control.lanes
+            .filter(lane => lane.type === 'trigger')
+            .map(lane => ({
+              path: control.path.join('.'),
+              laneKey: lane.key,
+              triggerCount: lane.triggers.length,
+              triggers: lane.triggers.map(trigger => ({
+                onT: trigger.on.t,
+                onValue: trigger.on.value,
+                offT: trigger.off.t,
+              })),
+            })));
+        if (triggerControls.length) {
+          console.info('[timeline:trigger:state]', {
+            time: filteredState.time,
+            state: filteredState.state,
+            stateSeq: payload.stateSeq,
+            triggerControls,
+          });
+        }
+      }
       this.state = filteredState;
       this.onState?.(filteredState);
       return;
@@ -157,7 +275,7 @@ export class TimelineClient {
               const currentLane = currentControl?.lanes.find(l => l.key === lane.key);
               nextLane = currentLane ?? lane;
             }
-            if (pendingRenderSeq !== undefined && nextLane.renderSeq === pendingRenderSeq) {
+            if (pendingRenderSeq !== undefined && nextLane.type !== 'keyframes' && nextLane.type !== 'step' && nextLane.type !== 'trigger' && nextLane.renderSeq === pendingRenderSeq) {
               this.pendingSeqs.delete(renderKey);
               const currentControl = this.state?.controls.find(c => c.path.join('.') === pathKey);
               const currentLane = currentControl?.lanes.find(l => l.key === lane.key);

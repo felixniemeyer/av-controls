@@ -12,6 +12,18 @@ import { Timeline } from '../timeline'
 import { StatePersistence } from '../persistence'
 import type { PersistenceOptions } from '../persistence'
 
+const websocketTriggerLog = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('timeline-trigger-log') === '1';
+
+function isTriggerRelevantTimelineEdit(message: AvControlsMessages.TimelineEditMessage) {
+  const edit = message.edit;
+  return edit.type === 'set-lane-triggers'
+    || edit.type === 'add-lane' && edit.lane.type === 'trigger'
+    || edit.type === 'seek'
+    || edit.type === 'set-state'
+    || edit.type === 'set-playing';
+}
+
 // Create a namespace to group the messages
 export namespace Messages {
   export interface Message {
@@ -312,6 +324,13 @@ export class Receiver extends WebSocketClient {
 
       rootReceiver.onUpdate = (update: Base.Update) => {
         const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
+        if (websocketTriggerLog && origin.kind === 'timeline') {
+          console.info('[ws:receiver:update]', {
+            panelId: id,
+            origin,
+            update,
+          })
+        }
         this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update, origin)))
         this.timelines?.[id]?.onControlUpdate(update)
         persistence?.handleUpdate(update)
@@ -342,6 +361,13 @@ export class Receiver extends WebSocketClient {
             }
             break;
           case AvControlsMessages.TimelineEditMessage.type:
+            if (websocketTriggerLog && isTriggerRelevantTimelineEdit(wsMessage.message as AvControlsMessages.TimelineEditMessage)) {
+              console.info('[ws:receiver:timeline-edit]', {
+                panelId: wsMessage.panelId,
+                edit: (wsMessage.message as AvControlsMessages.TimelineEditMessage).edit,
+                seq: (wsMessage.message as AvControlsMessages.TimelineEditMessage).seq,
+              })
+            }
           case AvControlsMessages.TimelineRequestState.type:
             this.timelines?.[wsMessage.panelId]?.handleMessage(wsMessage.message)
             break;
