@@ -111,4 +111,10 @@ export class Sender extends Base.Sender {
     this.on = state.on
     this.onSignal(new Signal(this.on))
   }
+
+  handleUpdate(update: Update) {
+    this.on = update.on
+    // A remote/timeline-driven update resolves any local half-confirmed click.
+    this.awaitingConfirmation = false
+  }
 }

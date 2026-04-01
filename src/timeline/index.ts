@@ -961,7 +961,7 @@ export class Timeline {
           time: this.time,
           state: this.timelineState,
           lanes: state.lanes
-            .filter(lane => lane.enabled && lane.type === 'trigger')
+            .filter((lane): lane is TimelineTriggerLane => lane.enabled && lane.type === 'trigger')
             .map(lane => ({
               laneKey: lane.key,
               evaluated: laneValues[lane.key],

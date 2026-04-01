@@ -1,6 +1,9 @@
 import { type SpecsDict } from '../common'
 import { Group, Base } from '../controls'
 
+const tabsTimelineUpdateLog = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('controller-timeline-deep-log') === '1'
+
 export class State extends Group.State {
   constructor(
     public activeId: string,
@@ -95,6 +98,16 @@ export class Sender extends Group.Sender {
     return new State(this.activeId, childStates);
   }
 
+  handleUpdate(update: { controlId: string; update: Base.Update }): void {
+    const sender = this.senders[update.controlId]
+    if (tabsTimelineUpdateLog) {
+      console.info(`[controller:tabs:update] controlId=${update.controlId} hasSender=${Boolean(sender)} update=${JSON.stringify(update.update)}`)
+    }
+    if (sender) {
+      sender.handleUpdate(update.update)
+    }
+  }
+
   setState(state: State): void {
     if (state instanceof State) {
       this.activeId = state.activeId;
@@ -107,4 +120,3 @@ export class Sender extends Group.Sender {
     }
   }
 }
-

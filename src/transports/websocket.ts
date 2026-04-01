@@ -104,6 +104,13 @@ export interface WebSocketAdapterOptions {
   maxReconnectAttempts?: number;
 }
 
+export interface WebSocketSenderOptions extends WebSocketAdapterOptions {
+  /**
+   * Observe the latest available panel ids announced by the broker.
+   */
+  onPanelList?: (panelIds: string[]) => void;
+}
+
 /**
  * WebSocket-based communication adapter
  */
@@ -379,31 +386,36 @@ export class Receiver extends WebSocketClient {
 
 export class Sender extends WebSocketClient implements BaseSender {
   panelId: string | null = null
+  private isPanelAttached = false
   private lastSeqByPath = new Map<string, number>()
 
   constructor(
     url: string,
     private chooseNetPanel: (panelIdList: string[]) => Promise<string>, 
-    options?: WebSocketAdapterOptions,
+    private senderOptions?: WebSocketSenderOptions,
   ) {
-    super(url, options)
+    super(url, senderOptions)
     this.initialize()
   }
 
   onConnectionOpened(): void {
+    this.isPanelAttached = false
     this.sendWsMessage(new Messages.RegisterSender());
   }
 
   async handleWsMessage(message: Messages.Message): Promise<void> {
     switch(message.type) {
       case Messages.PanelList.type:
-        const panelIds = (message as Messages.PanelList).panelIds
-        this.panelId = await this.chooseNetPanel(panelIds)
-        this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
+        await this.handlePanelList((message as Messages.PanelList).panelIds)
         break;
       case Messages.WrappedMessage.type:
         const wrapped = message as Messages.WrappedMessage
         const avMessage = wrapped.message as AvControlsMessages.Message
+        if (avMessage.type === AvControlsMessages.RootSpecification.type) {
+          this.panelId = wrapped.panelId
+          this.isPanelAttached = true
+          this.lastSeqByPath.clear()
+        }
         if (avMessage.type === AvControlsMessages.ControlUpdate.type) {
           const updateMsg = avMessage as AvControlsMessages.ControlUpdate
           const seq = updateMsg.seq
@@ -425,7 +437,7 @@ export class Sender extends WebSocketClient implements BaseSender {
    * Actual send implementation
    */
   send(message: AvControlsMessages.Message): void {
-    if(this.panelId) {
+    if(this.panelId && this.isPanelAttached) {
       this.sendWsMessage(new Messages.WrappedMessage(this.panelId, message));
     } 
   }
@@ -437,6 +449,34 @@ export class Sender extends WebSocketClient implements BaseSender {
 
   private broadcastAvMessage(message: AvControlsMessages.Message): void {
     this.listeners.forEach(listener => listener(message))
+  }
+
+  private async handlePanelList(panelIds: string[]): Promise<void> {
+    this.senderOptions?.onPanelList?.([...panelIds])
+
+    if (panelIds.length === 0) {
+      this.isPanelAttached = false
+      return
+    }
+
+    if (this.panelId && panelIds.includes(this.panelId)) {
+      if (!this.isPanelAttached) {
+        this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
+      }
+      return
+    }
+
+    const nextPanelId = await this.chooseNetPanel(panelIds)
+    if (!nextPanelId || !panelIds.includes(nextPanelId)) {
+      Logger.warn('Ignoring invalid panel selection', { nextPanelId, panelIds })
+      this.isPanelAttached = false
+      return
+    }
+
+    this.panelId = nextPanelId
+    this.isPanelAttached = false
+    this.lastSeqByPath.clear()
+    this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
   }
 }
 

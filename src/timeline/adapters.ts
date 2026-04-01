@@ -4,6 +4,14 @@ import type { TimelineKeyframe, TimelineLane } from '../messages';
 type Quaternion = [number, number, number, number];
 type Vec3 = [number, number, number];
 type Dot = [number, number];
+type Player3DPose = {
+  position: Vec3;
+  rotation: Quaternion;
+};
+
+type SanitizedPlayer3DKeyframe = TimelineKeyframe & {
+  value: Player3DPose;
+};
 
 export type TimelineAdapter = {
   kind: 'curve' | 'step' | 'trigger' | 'keyframes';
@@ -189,7 +197,7 @@ function findKeyframeSegment(keyframes: TimelineKeyframe[], time: number) {
   return { sorted, index: sorted.length - 1, atStart: false, atEnd: true };
 }
 
-function sanitizePlayer3DPose(value: any) {
+function sanitizePlayer3DPose(value: any): Player3DPose {
   const position = Array.isArray(value?.position) ? value.position : [];
   const rotation = Array.isArray(value?.rotation) ? value.rotation : [];
   return {
@@ -205,6 +213,25 @@ function sanitizePlayer3DPose(value: any) {
       typeof rotation[3] === 'number' ? rotation[3] : 1,
     ]),
   };
+}
+
+function sanitizePlayer3DKeyframes(keyframes: TimelineKeyframe[]): SanitizedPlayer3DKeyframe[] {
+  const sorted = sortKeyframes(keyframes).map((keyframe) => ({
+    ...keyframe,
+    value: sanitizePlayer3DPose(keyframe.value),
+  }));
+
+  for (let i = 1; i < sorted.length; i++) {
+    sorted[i] = {
+      ...sorted[i]!,
+      value: {
+        ...sorted[i]!.value,
+        rotation: alignQuaternionHemisphere(sorted[i - 1]!.value.rotation, sorted[i]!.value.rotation),
+      },
+    };
+  }
+
+  return sorted;
 }
 
 function sanitizeDotsValue(value: any) {
@@ -253,13 +280,20 @@ function getSquadControl(
   return quaternionMultiply(current, quaternionExp(blended));
 }
 
+function scaleSquadControl(current: Quaternion, control: Quaternion, strength: number): Quaternion {
+  return slerpQuaternion(current, control, clamp01(strength));
+}
+
 function evaluatePlayer3DKeyframes(lane: TimelineLane, time: number) {
   if (lane.type !== 'keyframes') return null;
-  const segment = findKeyframeSegment(lane.keyframes, time);
+  const keyframes = sanitizePlayer3DKeyframes(lane.keyframes);
+  if (!keyframes.length) return null;
+
+  const segment = findKeyframeSegment(keyframes, time);
   if (!segment) return null;
-  const { sorted, index, atStart, atEnd } = segment;
+  const { sorted, index, atStart, atEnd } = segment as typeof segment & { sorted: SanitizedPlayer3DKeyframe[] };
   if (atStart || atEnd || index >= sorted.length - 1) {
-    return sanitizePlayer3DPose(sorted[Math.min(index, sorted.length - 1)]!.value);
+    return sorted[Math.min(index, sorted.length - 1)]!.value;
   }
 
   const current = sorted[index]!;
@@ -268,14 +302,14 @@ function evaluatePlayer3DKeyframes(lane: TimelineLane, time: number) {
   const after = index + 2 < sorted.length ? sorted[index + 2]! : null;
   const dt = Math.max(1e-6, next.t - current.t);
   const u = (time - current.t) / dt;
-  const a = sanitizePlayer3DPose(current.value);
-  const b = sanitizePlayer3DPose(next.value);
+  const a = current.value;
+  const b = next.value;
 
   const qa = a.rotation;
-  const qb = alignQuaternionHemisphere(qa, b.rotation);
+  const qb = b.rotation;
 
-  const prevPose = prev ? sanitizePlayer3DPose(prev.value) : null;
-  const afterPose = after ? sanitizePlayer3DPose(after.value) : null;
+  const prevPose = prev?.value ?? null;
+  const afterPose = after?.value ?? null;
   const currentSmoothness = endpointSmoothness(current.leftSmooth, current.rightSmooth);
   const nextSmoothness = endpointSmoothness(next.leftSmooth, next.rightSmooth);
 
@@ -294,18 +328,17 @@ function evaluatePlayer3DKeyframes(lane: TimelineLane, time: number) {
     after ? after.t - next.t : null,
   );
 
-  const tangentOut = vec3Scale(positionVelocityCurrent, dt);
-  const tangentIn = vec3Scale(positionVelocityNext, dt);
+  const tangentOut = vec3Scale(positionVelocityCurrent, dt * currentSmoothness);
+  const tangentIn = vec3Scale(positionVelocityNext, dt * nextSmoothness);
 
-  const prevQ = prevPose ? alignQuaternionHemisphere(qa, prevPose.rotation) : null;
-  const nextNextQ = afterPose ? alignQuaternionHemisphere(qb, afterPose.rotation) : null;
-  const outControl = getSquadControl(prevQ, qa, qb);
-  const inControl = getSquadControl(qa, qb, nextNextQ);
-  const shapedU = shapeSegmentParameter(u, currentSmoothness, nextSmoothness);
+  const prevQ = prevPose?.rotation ?? null;
+  const nextNextQ = afterPose?.rotation ?? null;
+  const outControl = scaleSquadControl(qa, getSquadControl(prevQ, qa, qb), currentSmoothness);
+  const inControl = scaleSquadControl(qb, getSquadControl(qa, qb, nextNextQ), nextSmoothness);
 
   return {
-    position: hermiteVec3(a.position, b.position, tangentOut, tangentIn, shapedU),
-    rotation: squadQuaternion(qa, qb, outControl, inControl, shapedU),
+    position: hermiteVec3(a.position, b.position, tangentOut, tangentIn, u),
+    rotation: squadQuaternion(qa, qb, outControl, inControl, u),
   };
 }
 

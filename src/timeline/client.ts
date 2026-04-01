@@ -6,6 +6,13 @@ export type TimelineClientOptions = {
   autoRequestState?: boolean;
 };
 
+export type TimelineStateEvent = {
+  state: TimelineState;
+  source: 'snapshot' | 'edit-echo';
+  seq?: number;
+  stateSeq?: number;
+};
+
 export class TimelineClient {
   private state: TimelineState | null = null;
   private rootSpec: RootSpecification | null = null;
@@ -13,13 +20,12 @@ export class TimelineClient {
   private pendingSeqs = new Map<string, number>(); // controlPath:laneKey[:render] -> seq
   private latestTimelineEditSeq = 0;
   private latestStateSeq = 0;
-  private pendingTransportState: { seq: number; state: TimelineState['state']; playing: boolean } | null = null;
   private triggerLog = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('timeline-trigger-log') === '1';
-  private stateLog = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).get('timeline-state-log') === '1';
+  private playLog = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('timeline-play-log') === '1';
 
-  public onState: ((state: TimelineState) => void) | null = null;
+  public onState: ((event: TimelineStateEvent) => void) | null = null;
   public onRootSpec: ((spec: RootSpecification) => void) | null = null;
   public onControlUpdate: ((update: ControlUpdate) => void) | null = null;
 
@@ -51,26 +57,29 @@ export class TimelineClient {
     const effectiveSeq = seq ?? ++this.seqCounter;
     this.latestTimelineEditSeq = Math.max(this.latestTimelineEditSeq, effectiveSeq);
     this.sender.send(new TimelineEditMessage(edit, effectiveSeq));
+    return effectiveSeq;
   }
 
   setPlaying(playing: boolean) {
-    const seq = ++this.seqCounter;
-    this.pendingTransportState = {
-      seq,
-      state: playing ? 'playing' : 'paused',
-      playing,
-    };
-    this.sendEdit({ type: 'set-playing', playing }, seq);
+    const seq = this.seqCounter + 1;
+    if (this.playLog) {
+      console.info('[timeline:play:edit]', {
+        playing,
+        nextSeq: seq,
+      });
+    }
+    return this.sendEdit({ type: 'set-playing', playing }, seq);
   }
 
   setState(state: 'playing' | 'paused' | 'scrubbing' | 'rendering') {
-    const seq = ++this.seqCounter;
-    this.pendingTransportState = {
-      seq,
-      state,
-      playing: state === 'playing',
-    };
-    this.sendEdit({ type: 'set-state', state }, seq);
+    const seq = this.seqCounter + 1;
+    if (this.playLog) {
+      console.info('[timeline:play:set-state-edit]', {
+        state,
+        nextSeq: seq,
+      });
+    }
+    return this.sendEdit({ type: 'set-state', state }, seq);
   }
 
   seek(time: number) {
@@ -176,50 +185,6 @@ export class TimelineClient {
         // Stale state echo from an older timeline edit.
         return;
       }
-      if (this.pendingTransportState) {
-        const matchesPending = payload.state.state === this.pendingTransportState.state
-          && payload.state.playing === this.pendingTransportState.playing;
-        const acknowledgesOrSupersedes = typeof payload.seq === 'number'
-          && payload.seq >= this.pendingTransportState.seq;
-
-        if (matchesPending) {
-          if (this.stateLog) {
-            console.info('[timeline:state-pending]', {
-              action: 'accept-matching',
-              pending: this.pendingTransportState,
-              incomingSeq: payload.seq,
-              incomingStateSeq: payload.stateSeq,
-              state: payload.state.state,
-              playing: payload.state.playing,
-            });
-          }
-          this.pendingTransportState = null;
-        } else if (!acknowledgesOrSupersedes) {
-          if (this.stateLog) {
-            console.info('[timeline:state-pending]', {
-              action: 'drop-contradicting',
-              pending: this.pendingTransportState,
-              incomingSeq: payload.seq,
-              incomingStateSeq: payload.stateSeq,
-              state: payload.state.state,
-              playing: payload.state.playing,
-            });
-          }
-          return;
-        } else {
-          if (this.stateLog) {
-            console.info('[timeline:state-pending]', {
-              action: 'accept-superseding',
-              pending: this.pendingTransportState,
-              incomingSeq: payload.seq,
-              incomingStateSeq: payload.stateSeq,
-              state: payload.state.state,
-              playing: payload.state.playing,
-            });
-          }
-          this.pendingTransportState = null;
-        }
-      }
       const filteredState = this.filterOwnEdits(payload.state);
       if (this.triggerLog) {
         const triggerControls = filteredState.controls
@@ -245,7 +210,12 @@ export class TimelineClient {
         }
       }
       this.state = filteredState;
-      this.onState?.(filteredState);
+      this.onState?.({
+        state: filteredState,
+        source: typeof payload.seq === 'number' ? 'edit-echo' : 'snapshot',
+        seq: payload.seq,
+        stateSeq: payload.stateSeq,
+      });
       return;
     }
     if (message.type === ControlUpdate.type) {
