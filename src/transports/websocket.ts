@@ -428,6 +428,23 @@ export class Receiver extends WebSocketClient {
         break;
     }
   }
+
+  send(message: AvControlsMessages.Message, panelId?: string): void {
+    const resolvedPanelId = panelId ?? this.resolveDefaultPanelId()
+    if (!resolvedPanelId) {
+      Logger.warn('Receiver send skipped: no panelId available for outgoing message', { message })
+      return
+    }
+    this.sendWsMessage(new Messages.WrappedMessage(resolvedPanelId, message))
+  }
+
+  private resolveDefaultPanelId(): string | null {
+    const panelIds = Object.keys(this.rootReceivers)
+    if (panelIds.length === 1) {
+      return panelIds[0] ?? null
+    }
+    return null
+  }
 }
 
 export class Sender extends WebSocketClient implements BaseSender {

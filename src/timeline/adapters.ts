@@ -17,10 +17,11 @@ type Player3DSegment = {
   startTime: number;
   endTime: number;
   duration: number;
-  positionControls: [Vec3, Vec3, Vec3, Vec3];
+  positionStart: Vec3;
+  positionEnd: Vec3;
+  positionStartTangent: Vec3;
+  positionEndTangent: Vec3;
   rotationControls: [Quaternion, Quaternion, Quaternion, Quaternion];
-  positionStartUSlope: number;
-  positionEndUSlope: number;
 };
 
 type PreparedPlayer3DCurve = {
@@ -405,22 +406,6 @@ function getRotationTCBBaseTangent(
   return [0, 0, 0];
 }
 
-function cubicBezierScalar(p0: number, p1: number, p2: number, p3: number, t: number) {
-  const oneMinusT = 1 - t;
-  return oneMinusT ** 3 * p0
-    + 3 * oneMinusT ** 2 * t * p1
-    + 3 * oneMinusT * t ** 2 * p2
-    + t ** 3 * p3;
-}
-
-function cubicBezierVec3(points: [Vec3, Vec3, Vec3, Vec3], t: number): Vec3 {
-  return [
-    cubicBezierScalar(points[0][0], points[1][0], points[2][0], points[3][0], t),
-    cubicBezierScalar(points[0][1], points[1][1], points[2][1], points[3][1], t),
-    cubicBezierScalar(points[0][2], points[1][2], points[2][2], points[3][2], t),
-  ];
-}
-
 function sphericalBezierQuaternion(points: [Quaternion, Quaternion, Quaternion, Quaternion], t: number): Quaternion {
   const q01 = slerpQuaternion(points[0], points[1], t);
   const q12 = slerpQuaternion(points[1], points[2], t);
@@ -430,44 +415,8 @@ function sphericalBezierQuaternion(points: [Quaternion, Quaternion, Quaternion, 
   return slerpQuaternion(q012, q123, t);
 }
 
-function handleActivation(value: number | undefined) {
-  const clamped = clamp01(value);
-  return clamped <= 0 ? 0 : clamped * clamped;
-}
-
 function quaternionAngle(a: Quaternion, b: Quaternion) {
   return 2 * quaternionDistance(a, b);
-}
-
-function positionEndpointDerivativeMagnitude(
-  controls: [Vec3, Vec3, Vec3, Vec3],
-  side: 'start' | 'end',
-) {
-  return side === 'start'
-    ? 3 * vec3Length(vec3Sub(controls[1], controls[0]))
-    : 3 * vec3Length(vec3Sub(controls[3], controls[2]));
-}
-
-function clampRemapSlopes(duration: number, startSlope: number, endSlope: number) {
-  const dt = Math.max(1e-6, duration);
-  let m0 = Math.max(0, startSlope) * dt;
-  let m1 = Math.max(0, endSlope) * dt;
-  const sum = m0 + m1;
-  if (sum > 3) {
-    const scale = 3 / sum;
-    m0 *= scale;
-    m1 *= scale;
-  }
-  return {
-    start: m0 / dt,
-    end: m1 / dt,
-  };
-}
-
-function evaluateSegmentRemap(duration: number, startSlope: number, endSlope: number, localTime: number) {
-  const dt = Math.max(1e-6, duration);
-  const tau = clamp01(localTime / dt);
-  return clamp01(hermiteScalar(0, 1, startSlope * dt, endSlope * dt, tau));
 }
 
 function findSegmentIndexFromTime(keyframes: SanitizedPlayer3DKeyframe[], time: number) {
@@ -507,7 +456,7 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
   const cached = player3DCurveCache.get(lane);
   if (cached && cached.signature === signature) return cached.curve;
 
-  const positionDirections: Vec3[] = [];
+  const positionVelocities: Vec3[] = [];
   const rotationInTangents: Vec3[] = [];
   const rotationOutTangents: Vec3[] = [];
   for (let i = 0; i < keyframes.length; i++) {
@@ -517,7 +466,7 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
     const next = i + 1 < keyframes.length ? keyframes[i + 1]!.value : null;
     const dtPrev = i > 0 ? keyframes[i]!.t - keyframes[i - 1]!.t : null;
     const dtNext = i + 1 < keyframes.length ? keyframes[i + 1]!.t - keyframes[i]!.t : null;
-    positionDirections.push(getPositionDirection(prev?.position ?? null, current.position, next?.position ?? null, dtPrev, dtNext));
+    positionVelocities.push(getPositionVelocity(prev?.position ?? null, current.position, next?.position ?? null, dtPrev, dtNext));
     const baseTangent = getRotationTCBBaseTangent(prev?.rotation ?? null, current.rotation, next?.rotation ?? null);
     rotationInTangents.push(vec3Scale(baseTangent, clamp01(currentKeyframe.leftSmooth)));
     rotationOutTangents.push(vec3Scale(baseTangent, clamp01(currentKeyframe.rightSmooth)));
@@ -527,18 +476,11 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
   for (let i = 0; i < keyframes.length - 1; i++) {
     const start = keyframes[i]!;
     const end = keyframes[i + 1]!;
-    const positionChord = vec3Length(vec3Sub(end.value.position, start.value.position));
     const outAmount = clamp01(start.rightSmooth);
     const inAmount = clamp01(end.leftSmooth);
-    const outHandleLength = (positionChord / 3) * outAmount;
-    const inHandleLength = (positionChord / 3) * inAmount;
-
-    const positionControls: [Vec3, Vec3, Vec3, Vec3] = [
-      start.value.position,
-      vec3Add(start.value.position, vec3Scale(positionDirections[i]!, outHandleLength)),
-      vec3Sub(end.value.position, vec3Scale(positionDirections[i + 1]!, inHandleLength)),
-      end.value.position,
-    ];
+    const duration = Math.max(1e-6, end.t - start.t);
+    const positionStartTangent = vec3Scale(positionVelocities[i]!, duration * outAmount);
+    const positionEndTangent = vec3Scale(positionVelocities[i + 1]!, duration * inAmount);
 
     const startRotationControl = quaternionApplyTangent(start.value.rotation, vec3Scale(rotationOutTangents[i]!, 1 / 3));
     const endRotationControl = quaternionApplyTangent(end.value.rotation, vec3Scale(rotationInTangents[i + 1]!, -1 / 3));
@@ -552,72 +494,13 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
     segments.push({
       startTime: start.t,
       endTime: end.t,
-      duration: Math.max(1e-6, end.t - start.t),
-      positionControls,
+      duration,
+      positionStart: start.value.position,
+      positionEnd: end.value.position,
+      positionStartTangent,
+      positionEndTangent,
       rotationControls,
-      positionStartUSlope: 1 / Math.max(1e-6, end.t - start.t),
-      positionEndUSlope: 1 / Math.max(1e-6, end.t - start.t),
     });
-  }
-
-  const positionLeftUSlopes = new Array<number>(keyframes.length).fill(0);
-  const positionRightUSlopes = new Array<number>(keyframes.length).fill(0);
-  const positionSegmentSpeeds = segments.map((segment) => {
-    const delta = vec3Sub(segment.positionControls[3], segment.positionControls[0]);
-    return vec3Length(delta) / Math.max(1e-6, segment.duration);
-  });
-
-  if (segments.length > 0) {
-    const firstPositionRightActivation = handleActivation(keyframes[0]!.rightSmooth);
-    const firstPositionDerivative = positionEndpointDerivativeMagnitude(segments[0]!.positionControls, 'start');
-    positionRightUSlopes[0] = firstPositionDerivative > 1e-8
-      ? (firstPositionRightActivation * positionSegmentSpeeds[0]!) / firstPositionDerivative
-      : 0;
-
-    const lastIndex = keyframes.length - 1;
-    const lastSegmentIndex = segments.length - 1;
-    const lastPositionLeftActivation = handleActivation(keyframes[lastIndex]!.leftSmooth);
-    const lastPositionDerivative = positionEndpointDerivativeMagnitude(segments[lastSegmentIndex]!.positionControls, 'end');
-    positionLeftUSlopes[lastIndex] = lastPositionDerivative > 1e-8
-      ? (lastPositionLeftActivation * positionSegmentSpeeds[lastSegmentIndex]!) / lastPositionDerivative
-      : 0;
-  }
-
-  for (let i = 1; i < keyframes.length - 1; i++) {
-    const leftPositionActivation = handleActivation(keyframes[i]!.leftSmooth);
-    const rightPositionActivation = handleActivation(keyframes[i]!.rightSmooth);
-
-    const leftPositionDerivative = positionEndpointDerivativeMagnitude(segments[i - 1]!.positionControls, 'end');
-    const rightPositionDerivative = positionEndpointDerivativeMagnitude(segments[i]!.positionControls, 'start');
-
-    if (leftPositionActivation > 0 && rightPositionActivation > 0) {
-      const targetSpeed = (
-        rightPositionActivation * positionSegmentSpeeds[i - 1]!
-        + leftPositionActivation * positionSegmentSpeeds[i]!
-      ) / (leftPositionActivation + rightPositionActivation);
-      positionLeftUSlopes[i] = leftPositionDerivative > 1e-8 ? targetSpeed / leftPositionDerivative : 0;
-      positionRightUSlopes[i] = rightPositionDerivative > 1e-8 ? targetSpeed / rightPositionDerivative : 0;
-    } else {
-      positionLeftUSlopes[i] = leftPositionDerivative > 1e-8
-        ? (leftPositionActivation * positionSegmentSpeeds[i - 1]!) / leftPositionDerivative
-        : 0;
-      positionRightUSlopes[i] = rightPositionDerivative > 1e-8
-        ? (rightPositionActivation * positionSegmentSpeeds[i]!) / rightPositionDerivative
-        : 0;
-    }
-  }
-
-  for (let i = 0; i < segments.length; i++) {
-    const positionSlopes = clampRemapSlopes(
-      segments[i]!.duration,
-      positionRightUSlopes[i]!,
-      positionLeftUSlopes[i + 1]!,
-    );
-    segments[i] = {
-      ...segments[i]!,
-      positionStartUSlope: positionSlopes.start,
-      positionEndUSlope: positionSlopes.end,
-    };
   }
 
   const curve = {
@@ -639,21 +522,11 @@ function evaluatePlayer3DKeyframes(lane: TimelineLane, time: number) {
   const segmentIndex = findSegmentIndexFromTime(keyframes, time);
   const segment = segments[segmentIndex]!;
   const localTime = time - segment.startTime;
-  const uPosition = evaluateSegmentRemap(
-    segment.duration,
-    segment.positionStartUSlope,
-    segment.positionEndUSlope,
-    localTime,
-  );
-  const uRotation = evaluateSegmentRemap(
-    segment.duration,
-    1 / segment.duration,
-    1 / segment.duration,
-    localTime,
-  );
+  const uPosition = clamp01(localTime / segment.duration);
+  const uRotation = clamp01(localTime / segment.duration);
 
   return {
-    position: cubicBezierVec3(segment.positionControls, uPosition),
+    position: hermiteVec3(segment.positionStart, segment.positionEnd, segment.positionStartTangent, segment.positionEndTangent, uPosition),
     rotation: sphericalBezierQuaternion(segment.rotationControls, uRotation),
   };
 }
