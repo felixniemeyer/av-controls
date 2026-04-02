@@ -1,4 +1,4 @@
-import { type Message, ControlUpdate, RootSpecification, TimelineEditMessage, TimelineRequestState, TimelineStateMessage, type TimelineLane } from '../messages';
+import { type Message, ControlUpdate, RootSpecification, TimelineEditMessage, TimelineRequestState, TimelineStateMessage, type TimelineLane, type RenderConfig, RenderProgressMessage, RenderCompleteMessage } from '../messages';
 import type { TimelineEdit, TimelineState } from './index';
 import type { Sender as TransportSender } from '../transports/base';
 
@@ -28,6 +28,8 @@ export class TimelineClient {
   public onState: ((event: TimelineStateEvent) => void) | null = null;
   public onRootSpec: ((spec: RootSpecification) => void) | null = null;
   public onControlUpdate: ((update: ControlUpdate) => void) | null = null;
+  public onRenderProgress: ((msg: RenderProgressMessage) => void) | null = null;
+  public onRenderComplete: ((msg: RenderCompleteMessage) => void) | null = null;
 
   constructor(
     private sender: TransportSender,
@@ -166,6 +168,18 @@ export class TimelineClient {
     this.sendEdit({ type: 'render-frame' });
   }
 
+  startRenderSequence(config: RenderConfig) {
+    return this.sendEdit({ type: 'start-render-sequence', config });
+  }
+
+  pauseRenderSequence() {
+    return this.sendEdit({ type: 'pause-render-sequence' });
+  }
+
+  cancelRenderSequence() {
+    return this.sendEdit({ type: 'cancel-render-sequence' });
+  }
+
   private handleMessage(message: Message) {
     if (message.type === RootSpecification.type) {
       this.rootSpec = message as RootSpecification;
@@ -220,6 +234,15 @@ export class TimelineClient {
     }
     if (message.type === ControlUpdate.type) {
       this.onControlUpdate?.(message as ControlUpdate);
+      return;
+    }
+    if (message.type === RenderProgressMessage.type) {
+      this.onRenderProgress?.(message as RenderProgressMessage);
+      return;
+    }
+    if (message.type === RenderCompleteMessage.type) {
+      this.onRenderComplete?.(message as RenderCompleteMessage);
+      return;
     }
   }
 

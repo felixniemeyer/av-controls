@@ -129,6 +129,18 @@ export type TimelineState = {
   controls: TimelineControl[];
 };
 
+export type RenderConfig = {
+  name: string;
+  fps: number;
+  startTime: number;
+  endTime: number;
+  width?: number;
+  height?: number;
+  quality: number;
+  testMode?: boolean;
+  frameLimit?: number;
+};
+
 export type TimelineEdit =
   | { type: 'set-control-enabled'; path: string[]; enabled: boolean }
   | { type: 'set-lane-enabled'; path: string[]; laneKey: string; enabled: boolean }
@@ -146,7 +158,10 @@ export type TimelineEdit =
   | { type: 'seek'; time: number }
   | { type: 'set-always-render'; alwaysRender: boolean }
   | { type: 'set-loop-enabled'; loopEnabled: boolean }
-  | { type: 'set-loop-duration'; loopDurationSec: number };
+  | { type: 'set-loop-duration'; loopDurationSec: number }
+  | { type: 'start-render-sequence'; config: RenderConfig }
+  | { type: 'pause-render-sequence' }
+  | { type: 'cancel-render-sequence' };
 
 export class TimelineStateMessage implements Message {
   static type = 'timeline-state' as const;
@@ -166,5 +181,27 @@ export class TimelineEditMessage implements Message {
   constructor(
     public edit: TimelineEdit,
     public seq?: number,
+  ) {}
+}
+
+export class RenderProgressMessage implements Message {
+  static type = 'render-progress' as const;
+  type = RenderProgressMessage.type;
+
+  constructor(
+    public frameNumber: number,
+    public totalFrames: number,
+    public currentTime: number,
+  ) {}
+}
+
+export class RenderCompleteMessage implements Message {
+  static type = 'render-complete' as const;
+  type = RenderCompleteMessage.type;
+
+  constructor(
+    public success: boolean,
+    public totalFrames: number,
+    public error?: string,
   ) {}
 }

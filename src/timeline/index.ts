@@ -12,6 +12,7 @@ import type {
   TimelinePoint,
   TimelineKeyframe,
   TimelineEdit,
+  RenderConfig,
 } from '../messages';
 import {
   TimelineStateMessage,
@@ -395,6 +396,7 @@ export class Timeline {
   public loopDurationSec = 4;
   private timelineState: TimelineStateKind = 'paused';
   private renderingDelta = 1 / 30;
+  private renderSequenceConfig: RenderConfig | null = null;
   private _debug = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('timeline-debug') === '1';
   private _debugVerbose = typeof window !== 'undefined'
@@ -912,6 +914,28 @@ export class Timeline {
             this.time = this.time % this.loopDurationSec;
           }
         }
+        break;
+      }
+      case 'start-render-sequence': {
+        this.renderSequenceConfig = edit.config;
+        this.setRenderingFps(edit.config.fps);
+        this.seek(edit.config.startTime);
+        this.setState('rendering');
+        console.log('[Timeline] Starting render sequence:', edit.config);
+        break;
+      }
+      case 'pause-render-sequence': {
+        if (this.renderSequenceConfig) {
+          this.renderSequenceConfig.testMode = false;
+          this.renderSequenceConfig.frameLimit = undefined;
+          console.log('[Timeline] Resuming render sequence');
+        }
+        break;
+      }
+      case 'cancel-render-sequence': {
+        this.renderSequenceConfig = null;
+        this.setState('paused');
+        console.log('[Timeline] Cancelled render sequence');
         break;
       }
     }
