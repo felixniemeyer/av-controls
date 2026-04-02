@@ -2,7 +2,6 @@ import { Sender as BaseSender } from './base';
 import { CommunicationError, Logger } from '../error';
 
 import * as AvControlsMessages from '../messages';
-import { Timeline } from '../timeline';
 import { Base } from '../controls';
 import { StatePersistence } from '../persistence';
 import type { PersistenceOptions } from '../persistence';
@@ -34,17 +33,10 @@ export class Receiver {
     private otherWindow: Window,
     private name: string,
     private rootReceiver: Base.Receiver,
-    private timeline?: Timeline,
     persistenceOptions?: PersistenceOptions,
   ) {
     this.boundHandlePostMessage = this.handlePostMessage.bind(this);
     window.addEventListener('message', this.boundHandlePostMessage);
-
-    if (this.timeline) {
-      this.timeline.onMessage = (message: AvControlsMessages.Message) => {
-        this.send(message)
-      }
-    }
 
     // Initialize with or without persistence
     if (persistenceOptions && persistenceOptions.enabled !== false) {
@@ -72,7 +64,6 @@ export class Receiver {
     this.rootReceiver.onUpdate = (update: Base.Update) => {
       const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
       this.send(new AvControlsMessages.ControlUpdate(update, origin))
-      this.timeline?.onControlUpdate(update)
       this.persistence?.handleUpdate(update)
     }
   }
@@ -83,7 +74,6 @@ export class Receiver {
     this.rootReceiver.onUpdate = (update: Base.Update) => {
       const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
       this.send(new AvControlsMessages.ControlUpdate(update, origin))
-      this.timeline?.onControlUpdate(update)
     }
   }
 
@@ -94,12 +84,6 @@ export class Receiver {
         Base.Receiver.withUpdateOrigin({ kind: 'controller' }, () => {
           this.rootReceiver.handleSignal((data.message as AvControlsMessages.ControlSignal).signal)
         })
-        this.timeline?.onControlSignal((data.message as AvControlsMessages.ControlSignal).signal)
-      } else if(
-        data.message.type === AvControlsMessages.TimelineEditMessage.type ||
-        data.message.type === AvControlsMessages.TimelineRequestState.type
-      ) {
-        this.timeline?.handleMessage(data.message)
       }
     }
   }

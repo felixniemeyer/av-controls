@@ -8,23 +8,11 @@ import { CommunicationError, Logger } from '../error';
 import { Messages as AvControlsMessages } from '..';
 
 import { Base } from '../controls'
-import { Timeline } from '../timeline'
 import { StatePersistence } from '../persistence'
 import type { PersistenceOptions } from '../persistence'
 
-const websocketTriggerLog = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).get('timeline-trigger-log') === '1';
 const websocketConnectionLog = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('ws-log') === '1';
-
-function isTriggerRelevantTimelineEdit(message: AvControlsMessages.TimelineEditMessage) {
-  const edit = message.edit;
-  return edit.type === 'set-lane-triggers'
-    || edit.type === 'add-lane' && edit.lane.type === 'trigger'
-    || edit.type === 'seek'
-    || edit.type === 'set-state'
-    || edit.type === 'set-playing';
-}
 
 // Create a namespace to group the messages
 export namespace Messages {
@@ -318,7 +306,7 @@ export class Receiver extends WebSocketClient {
     private rootReceivers: {[id: string]: Base.Receiver},
     url: string,
     options?: WebSocketAdapterOptions,
-    private timelines?: {[id: string]: Timeline},
+    private artworkRuntimeHandlers?: {[id: string]: { handleMessage(message: AvControlsMessages.ArtworkRuntimeCommandMessage): void }},
     private persistenceOptions?: {[id: string]: PersistenceOptions},
   ) {
     super(url, options)
@@ -371,29 +359,13 @@ export class Receiver extends WebSocketClient {
       logWsConnection('receiver', 'announce-panel', {
         panelId: id,
         hasPersistence: Boolean(persistence),
-        hasTimeline: Boolean(this.timelines?.[id]),
       })
       this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec, rootReceiver.getState())));
 
       rootReceiver.onUpdate = (update: Base.Update) => {
         const origin = Base.Receiver.currentUpdateOrigin() ?? { kind: 'artwork' as const }
-        if (websocketTriggerLog && origin.kind === 'timeline') {
-          console.info('[ws:receiver:update]', {
-            panelId: id,
-            origin,
-            update,
-          })
-        }
         this.sendWsMessage(new Messages.WrappedMessage(id, new AvControlsMessages.ControlUpdate(update, origin)))
-        this.timelines?.[id]?.onControlUpdate(update)
         persistence?.handleUpdate(update)
-      }
-
-      const timeline = this.timelines?.[id]
-      if (timeline) {
-        timeline.onMessage = (message: AvControlsMessages.Message) => {
-          this.sendWsMessage(new Messages.WrappedMessage(id, message))
-        }
       }
     }
   }
@@ -407,22 +379,15 @@ export class Receiver extends WebSocketClient {
             const avMessage = wsMessage.message as AvControlsMessages.ControlSignal
             const receiver = this.rootReceivers[wsMessage.panelId]
             if (receiver) {
-              Base.Receiver.withUpdateOrigin({ kind: 'controller' }, () => {
+              Base.Receiver.withUpdateOrigin(avMessage.origin ?? { kind: 'controller' }, () => {
                 receiver.handleSignal(avMessage.signal)
               })
-              this.timelines?.[wsMessage.panelId]?.onControlSignal(avMessage.signal)
             }
             break;
-          case AvControlsMessages.TimelineEditMessage.type:
-            if (websocketTriggerLog && isTriggerRelevantTimelineEdit(wsMessage.message as AvControlsMessages.TimelineEditMessage)) {
-              console.info('[ws:receiver:timeline-edit]', {
-                panelId: wsMessage.panelId,
-                edit: (wsMessage.message as AvControlsMessages.TimelineEditMessage).edit,
-                seq: (wsMessage.message as AvControlsMessages.TimelineEditMessage).seq,
-              })
-            }
-          case AvControlsMessages.TimelineRequestState.type:
-            this.timelines?.[wsMessage.panelId]?.handleMessage(wsMessage.message)
+          case AvControlsMessages.ArtworkRuntimeCommandMessage.type:
+            this.artworkRuntimeHandlers?.[wsMessage.panelId]?.handleMessage(
+              wsMessage.message as AvControlsMessages.ArtworkRuntimeCommandMessage,
+            )
             break;
         }
         break;

@@ -5,6 +5,6 @@ export * as Errors from './error';
 export { Logger } from './error';
 export * from './common';
 
+export * as Artwork from './artwork';
 export * as Transports from './transports';
-export * as Timeline from './timeline';
 export * as Persistence from './persistence';

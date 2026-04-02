@@ -8,8 +8,8 @@ export interface Message {
 }
 
 export type UpdateOrigin =
-  | { kind: 'controller' }
-  | { kind: 'timeline' }
+  | { kind: 'controller'; clientId?: string }
+  | { kind: 'timeline'; clientId?: string }
   | { kind: 'artwork' };
 
 export class RootSpecification implements Message {
@@ -32,6 +32,7 @@ export class ControlSignal implements Message {
   constructor(
     public signal: Base.Signal,
     public seq?: number,
+    public origin?: UpdateOrigin,
   ) {}
 }
 
@@ -47,161 +48,39 @@ export class ControlUpdate implements Message {
   ) {}
 }
 
-// timeline messages
-export class TimelineRequestState implements Message {
-  static type = 'timeline-request-state' as const;
-  type = TimelineRequestState.type;
-}
+export type ArtworkMode = 'live' | 'playing' | 'paused';
 
-export type TimelinePoint = {
-  t: number;
-  v: number;
-  kind?: 'pos' | 'ctrl';
-};
+export type ArtworkRuntimeCommand =
+  | { type: 'set-artwork-mode'; mode: ArtworkMode }
+  | { type: 'render-artwork'; time: number; capture?: { downloadName?: string } };
 
-export type TimelineKeyframe = {
-  t: number;
-  value: unknown;
-  leftSmooth?: number;
-  rightSmooth?: number;
-};
-
-export type TimelineCurveLane = {
-  key: string;
-  type?: 'curve';
-  enabled: boolean;
-  points: TimelinePoint[];
-  seq?: number;
-  renderPoints?: TimelinePoint[];
-  renderSeq?: number;
-};
-
-export type TimelineStepLane = {
-  key: string;
-  type: 'step';
-  enabled: boolean;
-  points: TimelinePoint[];
-  seq?: number;
-};
-
-export type TimelineTrigger = {
-  on: {
-    t: number;
-    value: number;
-  };
-  off: {
-    t: number;
-  };
-};
-
-export type TimelineTriggerLane = {
-  key: string;
-  type: 'trigger';
-  enabled: boolean;
-  triggers: TimelineTrigger[];
-  seq?: number;
-};
-
-export type TimelineKeyframeLane = {
-  key: string;
-  type: 'keyframes';
-  enabled: boolean;
-  keyframes: TimelineKeyframe[];
-  seq?: number;
-};
-
-export type TimelineLane = TimelineCurveLane | TimelineStepLane | TimelineTriggerLane | TimelineKeyframeLane;
-
-export type TimelineControl = {
-  path: string[];
-  enabled: boolean;
-  manualOverride: boolean;
-  lanes: TimelineLane[];
-};
-
-export type TimelineState = {
-  time: number;
-  state: 'playing' | 'paused' | 'scrubbing' | 'rendering';
-  playing: boolean;
-  alwaysRender: boolean;
-  loopEnabled: boolean;
-  loopDurationSec: number;
-  controls: TimelineControl[];
-};
-
-export type RenderConfig = {
-  name: string;
-  fps: number;
-  startTime: number;
-  endTime: number;
-  width?: number;
-  height?: number;
-  quality: number;
-  testMode?: boolean;
-  frameLimit?: number;
-};
-
-export type TimelineEdit =
-  | { type: 'set-control-enabled'; path: string[]; enabled: boolean }
-  | { type: 'set-lane-enabled'; path: string[]; laneKey: string; enabled: boolean }
-  | { type: 'set-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
-  | { type: 'set-lane-triggers'; path: string[]; laneKey: string; triggers: TimelineTrigger[] }
-  | { type: 'set-lane-keyframes'; path: string[]; laneKey: string; keyframes: TimelineKeyframe[] }
-  | { type: 'set-render-lane-points'; path: string[]; laneKey: string; points: TimelinePoint[] }
-  | { type: 'add-lane'; path: string[]; lane: TimelineLane }
-  | { type: 'add-render-lane'; path: string[]; laneKey: string }
-  | { type: 'remove-lane'; path: string[]; laneKey: string }
-  | { type: 'remove-render-lane'; path: string[]; laneKey: string }
-  | { type: 'set-playing'; playing: boolean }
-  | { type: 'set-state'; state: 'playing' | 'paused' | 'scrubbing' | 'rendering' }
-  | { type: 'render-frame' }
-  | { type: 'seek'; time: number }
-  | { type: 'set-always-render'; alwaysRender: boolean }
-  | { type: 'set-loop-enabled'; loopEnabled: boolean }
-  | { type: 'set-loop-duration'; loopDurationSec: number }
-  | { type: 'start-render-sequence'; config: RenderConfig }
-  | { type: 'pause-render-sequence' }
-  | { type: 'cancel-render-sequence' };
-
-export class TimelineStateMessage implements Message {
-  static type = 'timeline-state' as const;
-  type = TimelineStateMessage.type;
+export class ArtworkRuntimeCommandMessage implements Message {
+  static type = 'artwork-runtime-command' as const;
+  type = ArtworkRuntimeCommandMessage.type;
 
   constructor(
-    public state: TimelineState,
-    public seq?: number,
-    public stateSeq?: number,
+    public command: ArtworkRuntimeCommand,
   ) {}
 }
 
-export class TimelineEditMessage implements Message {
-  static type = 'timeline-edit' as const;
-  type = TimelineEditMessage.type;
+export class ArtworkRuntimeStatusMessage implements Message {
+  static type = 'artwork-runtime-status' as const;
+  type = ArtworkRuntimeStatusMessage.type;
 
   constructor(
-    public edit: TimelineEdit,
-    public seq?: number,
+    public mode: ArtworkMode,
+    public time: number,
   ) {}
 }
 
-export class RenderProgressMessage implements Message {
-  static type = 'render-progress' as const;
-  type = RenderProgressMessage.type;
+export class ArtworkRenderAckMessage implements Message {
+  static type = 'artwork-render-ack' as const;
+  type = ArtworkRenderAckMessage.type;
 
   constructor(
-    public frameNumber: number,
-    public totalFrames: number,
-    public currentTime: number,
-  ) {}
-}
-
-export class RenderCompleteMessage implements Message {
-  static type = 'render-complete' as const;
-  type = RenderCompleteMessage.type;
-
-  constructor(
-    public success: boolean,
-    public totalFrames: number,
+    public time: number,
+    public captured: boolean,
+    public ok: boolean,
     public error?: string,
   ) {}
 }
