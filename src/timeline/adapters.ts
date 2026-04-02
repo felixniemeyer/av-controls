@@ -21,8 +21,6 @@ type Player3DSegment = {
   rotationControls: [Quaternion, Quaternion, Quaternion, Quaternion];
   positionStartUSlope: number;
   positionEndUSlope: number;
-  rotationStartUSlope: number;
-  rotationEndUSlope: number;
 };
 
 type PreparedPlayer3DCurve = {
@@ -388,6 +386,25 @@ function getRotationDirection(
   return [0, 0, 0];
 }
 
+function quaternionRelativeLog(from: Quaternion, to: Quaternion): Vec3 {
+  return quaternionLog(quaternionMultiply(quaternionConjugate(from), alignQuaternionHemisphere(from, to)));
+}
+
+function getRotationTCBBaseTangent(
+  prev: Quaternion | null,
+  current: Quaternion,
+  next: Quaternion | null,
+): Vec3 {
+  if (prev && next) {
+    const incoming = vec3Scale(quaternionRelativeLog(current, prev), -1);
+    const outgoing = quaternionRelativeLog(current, next);
+    return vec3Scale(vec3Add(incoming, outgoing), 0.5);
+  }
+  if (next) return quaternionRelativeLog(current, next);
+  if (prev) return vec3Scale(quaternionRelativeLog(current, prev), -1);
+  return [0, 0, 0];
+}
+
 function cubicBezierScalar(p0: number, p1: number, p2: number, p3: number, t: number) {
   const oneMinusT = 1 - t;
   return oneMinusT ** 3 * p0
@@ -429,15 +446,6 @@ function positionEndpointDerivativeMagnitude(
   return side === 'start'
     ? 3 * vec3Length(vec3Sub(controls[1], controls[0]))
     : 3 * vec3Length(vec3Sub(controls[3], controls[2]));
-}
-
-function rotationEndpointDerivativeMagnitude(
-  controls: [Quaternion, Quaternion, Quaternion, Quaternion],
-  side: 'start' | 'end',
-) {
-  return side === 'start'
-    ? 3 * quaternionAngle(controls[0], controls[1])
-    : 3 * quaternionAngle(controls[2], controls[3]);
 }
 
 function clampRemapSlopes(duration: number, startSlope: number, endSlope: number) {
@@ -500,15 +508,19 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
   if (cached && cached.signature === signature) return cached.curve;
 
   const positionDirections: Vec3[] = [];
-  const rotationDirections: Vec3[] = [];
+  const rotationInTangents: Vec3[] = [];
+  const rotationOutTangents: Vec3[] = [];
   for (let i = 0; i < keyframes.length; i++) {
     const prev = i > 0 ? keyframes[i - 1]!.value : null;
-    const current = keyframes[i]!.value;
+    const currentKeyframe = keyframes[i]!;
+    const current = currentKeyframe.value;
     const next = i + 1 < keyframes.length ? keyframes[i + 1]!.value : null;
     const dtPrev = i > 0 ? keyframes[i]!.t - keyframes[i - 1]!.t : null;
     const dtNext = i + 1 < keyframes.length ? keyframes[i + 1]!.t - keyframes[i]!.t : null;
     positionDirections.push(getPositionDirection(prev?.position ?? null, current.position, next?.position ?? null, dtPrev, dtNext));
-    rotationDirections.push(getRotationDirection(prev?.rotation ?? null, current.rotation, next?.rotation ?? null, dtPrev, dtNext));
+    const baseTangent = getRotationTCBBaseTangent(prev?.rotation ?? null, current.rotation, next?.rotation ?? null);
+    rotationInTangents.push(vec3Scale(baseTangent, clamp01(currentKeyframe.leftSmooth)));
+    rotationOutTangents.push(vec3Scale(baseTangent, clamp01(currentKeyframe.rightSmooth)));
   }
 
   const segments: Player3DSegment[] = [];
@@ -516,13 +528,10 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
     const start = keyframes[i]!;
     const end = keyframes[i + 1]!;
     const positionChord = vec3Length(vec3Sub(end.value.position, start.value.position));
-    const rotationChord = quaternionAngle(start.value.rotation, end.value.rotation);
     const outAmount = clamp01(start.rightSmooth);
     const inAmount = clamp01(end.leftSmooth);
     const outHandleLength = (positionChord / 3) * outAmount;
     const inHandleLength = (positionChord / 3) * inAmount;
-    const outRotationLength = (rotationChord / 3) * outAmount;
-    const inRotationLength = (rotationChord / 3) * inAmount;
 
     const positionControls: [Vec3, Vec3, Vec3, Vec3] = [
       start.value.position,
@@ -531,8 +540,8 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
       end.value.position,
     ];
 
-    const startRotationControl = quaternionApplyTangent(start.value.rotation, vec3Scale(rotationDirections[i]!, outRotationLength));
-    const endRotationControl = quaternionApplyTangent(end.value.rotation, vec3Scale(rotationDirections[i + 1]!, -inRotationLength));
+    const startRotationControl = quaternionApplyTangent(start.value.rotation, vec3Scale(rotationOutTangents[i]!, 1 / 3));
+    const endRotationControl = quaternionApplyTangent(end.value.rotation, vec3Scale(rotationInTangents[i + 1]!, -1 / 3));
     const rotationControls: [Quaternion, Quaternion, Quaternion, Quaternion] = [
       start.value.rotation,
       alignQuaternionHemisphere(start.value.rotation, startRotationControl),
@@ -548,60 +557,38 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
       rotationControls,
       positionStartUSlope: 1 / Math.max(1e-6, end.t - start.t),
       positionEndUSlope: 1 / Math.max(1e-6, end.t - start.t),
-      rotationStartUSlope: 1 / Math.max(1e-6, end.t - start.t),
-      rotationEndUSlope: 1 / Math.max(1e-6, end.t - start.t),
     });
   }
 
   const positionLeftUSlopes = new Array<number>(keyframes.length).fill(0);
   const positionRightUSlopes = new Array<number>(keyframes.length).fill(0);
-  const rotationLeftUSlopes = new Array<number>(keyframes.length).fill(0);
-  const rotationRightUSlopes = new Array<number>(keyframes.length).fill(0);
-
   const positionSegmentSpeeds = segments.map((segment) => {
     const delta = vec3Sub(segment.positionControls[3], segment.positionControls[0]);
     return vec3Length(delta) / Math.max(1e-6, segment.duration);
   });
-  const rotationSegmentSpeeds = segments.map((segment) => {
-    return quaternionAngle(segment.rotationControls[0], segment.rotationControls[3]) / Math.max(1e-6, segment.duration);
-  });
 
   if (segments.length > 0) {
     const firstPositionRightActivation = handleActivation(keyframes[0]!.rightSmooth);
-    const firstRotationRightActivation = handleActivation(keyframes[0]!.rightSmooth);
     const firstPositionDerivative = positionEndpointDerivativeMagnitude(segments[0]!.positionControls, 'start');
-    const firstRotationDerivative = rotationEndpointDerivativeMagnitude(segments[0]!.rotationControls, 'start');
     positionRightUSlopes[0] = firstPositionDerivative > 1e-8
       ? (firstPositionRightActivation * positionSegmentSpeeds[0]!) / firstPositionDerivative
-      : 0;
-    rotationRightUSlopes[0] = firstRotationDerivative > 1e-8
-      ? (firstRotationRightActivation * rotationSegmentSpeeds[0]!) / firstRotationDerivative
       : 0;
 
     const lastIndex = keyframes.length - 1;
     const lastSegmentIndex = segments.length - 1;
     const lastPositionLeftActivation = handleActivation(keyframes[lastIndex]!.leftSmooth);
-    const lastRotationLeftActivation = handleActivation(keyframes[lastIndex]!.leftSmooth);
     const lastPositionDerivative = positionEndpointDerivativeMagnitude(segments[lastSegmentIndex]!.positionControls, 'end');
-    const lastRotationDerivative = rotationEndpointDerivativeMagnitude(segments[lastSegmentIndex]!.rotationControls, 'end');
     positionLeftUSlopes[lastIndex] = lastPositionDerivative > 1e-8
       ? (lastPositionLeftActivation * positionSegmentSpeeds[lastSegmentIndex]!) / lastPositionDerivative
-      : 0;
-    rotationLeftUSlopes[lastIndex] = lastRotationDerivative > 1e-8
-      ? (lastRotationLeftActivation * rotationSegmentSpeeds[lastSegmentIndex]!) / lastRotationDerivative
       : 0;
   }
 
   for (let i = 1; i < keyframes.length - 1; i++) {
     const leftPositionActivation = handleActivation(keyframes[i]!.leftSmooth);
     const rightPositionActivation = handleActivation(keyframes[i]!.rightSmooth);
-    const leftRotationActivation = leftPositionActivation;
-    const rightRotationActivation = rightPositionActivation;
 
     const leftPositionDerivative = positionEndpointDerivativeMagnitude(segments[i - 1]!.positionControls, 'end');
     const rightPositionDerivative = positionEndpointDerivativeMagnitude(segments[i]!.positionControls, 'start');
-    const leftRotationDerivative = rotationEndpointDerivativeMagnitude(segments[i - 1]!.rotationControls, 'end');
-    const rightRotationDerivative = rotationEndpointDerivativeMagnitude(segments[i]!.rotationControls, 'start');
 
     if (leftPositionActivation > 0 && rightPositionActivation > 0) {
       const targetSpeed = (
@@ -618,22 +605,6 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
         ? (rightPositionActivation * positionSegmentSpeeds[i]!) / rightPositionDerivative
         : 0;
     }
-
-    if (leftRotationActivation > 0 && rightRotationActivation > 0) {
-      const targetSpeed = (
-        rightRotationActivation * rotationSegmentSpeeds[i - 1]!
-        + leftRotationActivation * rotationSegmentSpeeds[i]!
-      ) / (leftRotationActivation + rightRotationActivation);
-      rotationLeftUSlopes[i] = leftRotationDerivative > 1e-8 ? targetSpeed / leftRotationDerivative : 0;
-      rotationRightUSlopes[i] = rightRotationDerivative > 1e-8 ? targetSpeed / rightRotationDerivative : 0;
-    } else {
-      rotationLeftUSlopes[i] = leftRotationDerivative > 1e-8
-        ? (leftRotationActivation * rotationSegmentSpeeds[i - 1]!) / leftRotationDerivative
-        : 0;
-      rotationRightUSlopes[i] = rightRotationDerivative > 1e-8
-        ? (rightRotationActivation * rotationSegmentSpeeds[i]!) / rightRotationDerivative
-        : 0;
-    }
   }
 
   for (let i = 0; i < segments.length; i++) {
@@ -642,17 +613,10 @@ function preparePlayer3DCurve(lane: TimelineLane): PreparedPlayer3DCurve | null 
       positionRightUSlopes[i]!,
       positionLeftUSlopes[i + 1]!,
     );
-    const rotationSlopes = clampRemapSlopes(
-      segments[i]!.duration,
-      rotationRightUSlopes[i]!,
-      rotationLeftUSlopes[i + 1]!,
-    );
     segments[i] = {
       ...segments[i]!,
       positionStartUSlope: positionSlopes.start,
       positionEndUSlope: positionSlopes.end,
-      rotationStartUSlope: rotationSlopes.start,
-      rotationEndUSlope: rotationSlopes.end,
     };
   }
 
@@ -683,8 +647,8 @@ function evaluatePlayer3DKeyframes(lane: TimelineLane, time: number) {
   );
   const uRotation = evaluateSegmentRemap(
     segment.duration,
-    segment.rotationStartUSlope,
-    segment.rotationEndUSlope,
+    1 / segment.duration,
+    1 / segment.duration,
     localTime,
   );
 

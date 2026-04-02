@@ -14,6 +14,8 @@ import type { PersistenceOptions } from '../persistence'
 
 const websocketTriggerLog = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('timeline-trigger-log') === '1';
+const websocketConnectionLog = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('ws-log') === '1';
 
 function isTriggerRelevantTimelineEdit(message: AvControlsMessages.TimelineEditMessage) {
   const edit = message.edit;
@@ -35,7 +37,7 @@ export namespace Messages {
     static type = 'register-receiver' as const;
     type = RegisterReceiver.type;
 
-    constructor() {}
+  constructor() {}
   }
 
   export class RegisterSender implements Message {
@@ -82,6 +84,17 @@ export namespace Messages {
       public panelId: string
     ) {}
   }
+}
+
+function logWsConnection(role: 'sender' | 'receiver', event: string, data?: Record<string, unknown>) {
+  if (!websocketConnectionLog) {
+    return;
+  }
+  const relativeTimestamp = typeof performance !== 'undefined'
+    ? performance.now().toFixed(1)
+    : Date.now().toString();
+  const isoTimestamp = new Date().toISOString();
+  console.info(`[${isoTimestamp}] [ws:${role}] ${event} @${relativeTimestamp}ms`, data ?? {});
 }
 
 /**
@@ -141,6 +154,7 @@ abstract class WebSocketClient {
     return this.connect();
   }
 
+  protected abstract connectionRole(): 'sender' | 'receiver';
   abstract onConnectionOpened(): void;
 
   abstract handleWsMessage(message: Messages.Message): void;
@@ -154,6 +168,10 @@ abstract class WebSocketClient {
     }
     
     this.isConnecting = true;
+    logWsConnection(this.connectionRole(), 'connect-attempt', {
+      url: this.url,
+      reconnectAttempts: this.reconnectAttempts,
+    });
     
     return new Promise<void>((resolve, reject) => {
       try {
@@ -169,6 +187,7 @@ abstract class WebSocketClient {
           this.isConnecting = false;
           this.reconnectAttempts = 0;
           Logger.info('WebSocket connected', { url: this.url });
+          logWsConnection(this.connectionRole(), 'socket-open', { url: this.url });
 
           // Send 
           this.onConnectionOpened()
@@ -181,6 +200,11 @@ abstract class WebSocketClient {
             Logger.debug('WebSocket close', { url: this.url, code: event.code, reason: event.reason });
           }
           Logger.warn('WebSocket closed', { code: event.code, reason: event.reason });
+          logWsConnection(this.connectionRole(), 'socket-close', {
+            url: this.url,
+            code: event.code,
+            reason: event.reason,
+          });
           this.isConnecting = false;
           
           if (this.options.autoReconnect && this.reconnectAttempts < (this.options.maxReconnectAttempts || 10)) {
@@ -193,6 +217,7 @@ abstract class WebSocketClient {
             Logger.debug('WebSocket error', { url: this.url, error });
           }
           Logger.error('WebSocket error', { error });
+          logWsConnection(this.connectionRole(), 'socket-error', { url: this.url, error });
           this.isConnecting = false;
           
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -233,6 +258,11 @@ abstract class WebSocketClient {
         attempt: this.reconnectAttempts, 
         maxAttempts: this.options.maxReconnectAttempts 
       });
+      logWsConnection(this.connectionRole(), 'reconnect-scheduled', {
+        url: this.url,
+        attempt: this.reconnectAttempts,
+        maxAttempts: this.options.maxReconnectAttempts,
+      });
       
       this.connect().catch(() => {
         // Error is already logged in connect
@@ -268,6 +298,10 @@ abstract class WebSocketClient {
       this.options.autoReconnect = false;
       
       if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        logWsConnection(this.connectionRole(), 'dispose-close', {
+          url: this.url,
+          readyState: this.ws.readyState,
+        });
         this.ws.close();
       }
       
@@ -321,12 +355,24 @@ export class Receiver extends WebSocketClient {
     }
   }
 
+  protected connectionRole(): 'receiver' {
+    return 'receiver'
+  }
+
   onConnectionOpened(): void {
+    logWsConnection('receiver', 'register-receiver', {
+      panelIds: Object.keys(this.rootReceivers),
+    })
     this.sendWsMessage(new Messages.RegisterReceiver());
     for(const id in this.rootReceivers) {
       const rootReceiver = this.rootReceivers[id]!
       const persistence = this.persistenceByPanel.get(id)
 
+      logWsConnection('receiver', 'announce-panel', {
+        panelId: id,
+        hasPersistence: Boolean(persistence),
+        hasTimeline: Boolean(this.timelines?.[id]),
+      })
       this.sendWsMessage(new Messages.AddNetPanel(id, new AvControlsMessages.RootSpecification(id, rootReceiver.spec, rootReceiver.getState())));
 
       rootReceiver.onUpdate = (update: Base.Update) => {
@@ -398,8 +444,13 @@ export class Sender extends WebSocketClient implements BaseSender {
     this.initialize()
   }
 
+  protected connectionRole(): 'sender' {
+    return 'sender'
+  }
+
   onConnectionOpened(): void {
     this.isPanelAttached = false
+    logWsConnection('sender', 'register-sender', { selectedPanelId: this.panelId })
     this.sendWsMessage(new Messages.RegisterSender());
   }
 
@@ -415,6 +466,10 @@ export class Sender extends WebSocketClient implements BaseSender {
           this.panelId = wrapped.panelId
           this.isPanelAttached = true
           this.lastSeqByPath.clear()
+          logWsConnection('sender', 'panel-attached', {
+            panelId: this.panelId,
+            specName: (avMessage as AvControlsMessages.RootSpecification).name,
+          })
         }
         if (avMessage.type === AvControlsMessages.ControlUpdate.type) {
           const updateMsg = avMessage as AvControlsMessages.ControlUpdate
@@ -453,6 +508,11 @@ export class Sender extends WebSocketClient implements BaseSender {
 
   private async handlePanelList(panelIds: string[]): Promise<void> {
     this.senderOptions?.onPanelList?.([...panelIds])
+    logWsConnection('sender', 'panel-list', {
+      panelIds,
+      currentPanelId: this.panelId,
+      isPanelAttached: this.isPanelAttached,
+    })
 
     if (panelIds.length === 0) {
       this.isPanelAttached = false
@@ -461,6 +521,7 @@ export class Sender extends WebSocketClient implements BaseSender {
 
     if (this.panelId && panelIds.includes(this.panelId)) {
       if (!this.isPanelAttached) {
+        logWsConnection('sender', 'reattach-panel', { panelId: this.panelId })
         this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
       }
       return
@@ -470,12 +531,14 @@ export class Sender extends WebSocketClient implements BaseSender {
     if (!nextPanelId || !panelIds.includes(nextPanelId)) {
       Logger.warn('Ignoring invalid panel selection', { nextPanelId, panelIds })
       this.isPanelAttached = false
+      logWsConnection('sender', 'invalid-panel-selection', { nextPanelId, panelIds })
       return
     }
 
     this.panelId = nextPanelId
     this.isPanelAttached = false
     this.lastSeqByPath.clear()
+    logWsConnection('sender', 'choose-panel', { panelId: this.panelId })
     this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
   }
 }

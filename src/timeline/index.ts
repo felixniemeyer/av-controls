@@ -45,6 +45,7 @@ type TimelineOptions = {
   loopEnabled?: boolean;
   loopDurationSec?: number;
   onRender?: (timeContext: TimeContext) => void | Promise<void>;
+  onRenderSequenceStart?: (config: RenderConfig) => void | Promise<void>;
 };
 
 export type TimelineStateKind = 'playing' | 'paused' | 'scrubbing' | 'rendering';
@@ -415,6 +416,7 @@ export class Timeline {
   private _pendingRender = false;
   private _pendingRenderFrame = false;
   private _onRender: ((timeContext: TimeContext) => void | Promise<void>) | null = null;
+  private _onRenderSequenceStart: ((config: RenderConfig) => void | Promise<void>) | null = null;
   private controlChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private controlChangeDebounceMs = 500;
   private stateSeq = 0;
@@ -432,6 +434,7 @@ export class Timeline {
     this.loopEnabled = options?.loopEnabled ?? false;
     this.loopDurationSec = options?.loopDurationSec ?? 4;
     this._onRender = options?.onRender ?? null;
+    this._onRenderSequenceStart = options?.onRenderSequenceStart ?? null;
     this.buildIndex();
   }
 
@@ -482,16 +485,25 @@ export class Timeline {
     const deltaMs = now - this._lastFrameTime;
     this._lastFrameTime = now;
     const worldDeltaSeconds = deltaMs * 0.001;
-    const renderPass = this.timelineState === 'rendering' || this._pendingRenderFrame;
-    const deltaSeconds = this.timelineState === 'rendering'
+    const renderSequenceFrame = this.timelineState === 'rendering';
+    const renderPass = renderSequenceFrame || this._pendingRenderFrame;
+    const deltaSeconds = renderSequenceFrame
       ? this.renderingDelta
       : worldDeltaSeconds;
     const previousState = renderPass ? this.rootReceiver.getState() : null;
     const frameState: TimelineStateKind = renderPass ? 'rendering' : this.state();
 
-    // Advance time and apply automation
-    this.tick(deltaSeconds, worldDeltaSeconds, renderPass);
-    if (this.timelineState === 'playing' || this.timelineState === 'rendering') {
+    // Render sequences sample at the exact timeline time of the current frame.
+    // Interactive playback keeps the normal "advance then render" behavior.
+    if (renderSequenceFrame) {
+      this.lastWorldDelta = worldDeltaSeconds;
+      this.lastDelta = this.renderingDelta;
+      this.applyAutomation(true);
+      this._logStatsOncePerSecond();
+    } else {
+      this.tick(deltaSeconds, worldDeltaSeconds, renderPass);
+    }
+    if (this.timelineState === 'playing' || renderSequenceFrame) {
       this.sendState();
     }
     this._debugFrames += 1;
@@ -520,23 +532,25 @@ export class Timeline {
     }
 
     // Check if render sequence should stop
-    if (this.renderSequenceConfig && this.timelineState === 'rendering') {
+    if (this.renderSequenceConfig && renderSequenceFrame) {
       const config = this.renderSequenceConfig
+      const renderedFrames = Math.round((this.time - config.startTime) / this.renderingDelta) + 1
+      const nextTime = this.time + this.renderingDelta
 
-      // Check if we've reached the end time
-      if (this.time >= config.endTime) {
+      // Check if we've hit the frame limit (test mode)
+      if (config.testMode && config.frameLimit && renderedFrames >= config.frameLimit) {
+        console.log('[Timeline] Render sequence paused: reached frame limit')
+        // Don't null out config - it will be resumed or cancelled
+        this.setState('paused')
+      }
+      // Check if we've reached the end time for the next frame slot
+      else if (nextTime >= config.endTime) {
         console.log('[Timeline] Render sequence complete: reached end time')
         this.renderSequenceConfig = null
         this.setState('paused')
       }
-      // Check if we've hit the frame limit (test mode)
-      else if (config.testMode && config.frameLimit) {
-        const frameNumber = Math.floor((this.time - config.startTime) / this.renderingDelta)
-        if (frameNumber >= config.frameLimit - 1) {
-          console.log('[Timeline] Render sequence paused: reached frame limit')
-          // Don't null out config - it will be resumed or cancelled
-          this.setState('paused')
-        }
+      else {
+        this.time = Math.max(0, nextTime)
       }
     }
 
@@ -584,8 +598,19 @@ export class Timeline {
 
   private applyTimelineState(state: TimelineStateKind) {
     const wasRunning = this.isRunningState(this.timelineState);
+    const wasRendering = this.timelineState === 'rendering';
+
     this.setState(state);
+
     const isRunning = this.isRunningState(state);
+    const isRendering = state === 'rendering';
+
+    // Cancel render sequence if switching away from rendering
+    if (wasRendering && !isRendering && this.renderSequenceConfig) {
+      console.log('[Timeline] Cancelling render sequence due to state change')
+      this.renderSequenceConfig = null
+    }
+
     if (!wasRunning && isRunning) {
       this._ensureLoopRunning();
     }
@@ -943,6 +968,11 @@ export class Timeline {
         this.seek(edit.config.startTime);
         this.setState('rendering');
         console.log('[Timeline] Starting render sequence:', edit.config);
+
+        // Notify artwork to start frame renderer
+        if (this._onRenderSequenceStart) {
+          void this._onRenderSequenceStart(edit.config);
+        }
         break;
       }
       case 'pause-render-sequence': {
@@ -950,6 +980,10 @@ export class Timeline {
           this.renderSequenceConfig.testMode = false;
           this.renderSequenceConfig.frameLimit = undefined;
           console.log('[Timeline] Resuming render sequence');
+          this.setState('rendering');
+          if (this._onRenderSequenceStart) {
+            void this._onRenderSequenceStart(this.renderSequenceConfig);
+          }
         }
         break;
       }
