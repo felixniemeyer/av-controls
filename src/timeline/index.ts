@@ -519,6 +519,27 @@ export class Timeline {
       this.rootReceiver.restoreState(previousState);
     }
 
+    // Check if render sequence should stop
+    if (this.renderSequenceConfig && this.timelineState === 'rendering') {
+      const config = this.renderSequenceConfig
+
+      // Check if we've reached the end time
+      if (this.time >= config.endTime) {
+        console.log('[Timeline] Render sequence complete: reached end time')
+        this.renderSequenceConfig = null
+        this.setState('paused')
+      }
+      // Check if we've hit the frame limit (test mode)
+      else if (config.testMode && config.frameLimit) {
+        const frameNumber = Math.floor((this.time - config.startTime) / this.renderingDelta)
+        if (frameNumber >= config.frameLimit - 1) {
+          console.log('[Timeline] Render sequence paused: reached frame limit')
+          // Don't null out config - it will be resumed or cancelled
+          this.setState('paused')
+        }
+      }
+    }
+
     // Decide whether to continue
     const shouldContinue = this._running
       && (this.timelineState === 'playing' || this.timelineState === 'rendering' || this.alwaysRender || this._pendingRender);
