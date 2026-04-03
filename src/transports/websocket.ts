@@ -14,6 +14,8 @@ import type { PersistenceOptions } from '../persistence'
 const websocketConnectionLog = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('ws-log') === '1';
 
+let nextWebSocketClientId = 1;
+
 // Create a namespace to group the messages
 export namespace Messages {
   export interface Message {
@@ -120,6 +122,7 @@ abstract class WebSocketClient {
   private reconnectAttempts = 0;
   private reconnectTimeout: any = null;
   private isConnecting = false;
+  private readonly clientId = nextWebSocketClientId++;
   
   private options: WebSocketAdapterOptions = {
     autoReconnect: true,
@@ -142,6 +145,17 @@ abstract class WebSocketClient {
     return this.connect();
   }
 
+  protected getClientId() {
+    return this.clientId;
+  }
+
+  protected getLogPageContext() {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    return `${window.location.pathname}${window.location.search}`;
+  }
+
   protected abstract connectionRole(): 'sender' | 'receiver';
   abstract onConnectionOpened(): void;
 
@@ -157,8 +171,11 @@ abstract class WebSocketClient {
     
     this.isConnecting = true;
     logWsConnection(this.connectionRole(), 'connect-attempt', {
+      clientId: this.clientId,
+      page: this.getLogPageContext(),
       url: this.url,
       reconnectAttempts: this.reconnectAttempts,
+      readyState: this.ws?.readyState ?? null,
     });
     
     return new Promise<void>((resolve, reject) => {
@@ -175,7 +192,11 @@ abstract class WebSocketClient {
           this.isConnecting = false;
           this.reconnectAttempts = 0;
           Logger.info('WebSocket connected', { url: this.url });
-          logWsConnection(this.connectionRole(), 'socket-open', { url: this.url });
+          logWsConnection(this.connectionRole(), 'socket-open', {
+            clientId: this.clientId,
+            page: this.getLogPageContext(),
+            url: this.url,
+          });
 
           // Send 
           this.onConnectionOpened()
@@ -189,9 +210,12 @@ abstract class WebSocketClient {
           }
           Logger.warn('WebSocket closed', { code: event.code, reason: event.reason });
           logWsConnection(this.connectionRole(), 'socket-close', {
+            clientId: this.clientId,
+            page: this.getLogPageContext(),
             url: this.url,
             code: event.code,
             reason: event.reason,
+            willReconnect: Boolean(this.options.autoReconnect && this.reconnectAttempts < (this.options.maxReconnectAttempts || 10)),
           });
           this.isConnecting = false;
           
@@ -205,7 +229,12 @@ abstract class WebSocketClient {
             Logger.debug('WebSocket error', { url: this.url, error });
           }
           Logger.error('WebSocket error', { error });
-          logWsConnection(this.connectionRole(), 'socket-error', { url: this.url, error });
+          logWsConnection(this.connectionRole(), 'socket-error', {
+            clientId: this.clientId,
+            page: this.getLogPageContext(),
+            url: this.url,
+            error,
+          });
           this.isConnecting = false;
           
           if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -247,9 +276,12 @@ abstract class WebSocketClient {
         maxAttempts: this.options.maxReconnectAttempts 
       });
       logWsConnection(this.connectionRole(), 'reconnect-scheduled', {
+        clientId: this.clientId,
+        page: this.getLogPageContext(),
         url: this.url,
         attempt: this.reconnectAttempts,
         maxAttempts: this.options.maxReconnectAttempts,
+        delayMs: this.options.reconnectInterval,
       });
       
       this.connect().catch(() => {
@@ -287,11 +319,19 @@ abstract class WebSocketClient {
       
       if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
         logWsConnection(this.connectionRole(), 'dispose-close', {
+          clientId: this.clientId,
+          page: this.getLogPageContext(),
           url: this.url,
           readyState: this.ws.readyState,
         });
         this.ws.close();
       }
+
+      logWsConnection(this.connectionRole(), 'disposed', {
+        clientId: this.clientId,
+        page: this.getLogPageContext(),
+        url: this.url,
+      });
       
       this.ws = null;
     }
@@ -349,6 +389,7 @@ export class Receiver extends WebSocketClient {
 
   onConnectionOpened(): void {
     logWsConnection('receiver', 'register-receiver', {
+      clientId: this.getClientId(),
       panelIds: Object.keys(this.rootReceivers),
     })
     this.sendWsMessage(new Messages.RegisterReceiver());
@@ -357,6 +398,7 @@ export class Receiver extends WebSocketClient {
       const persistence = this.persistenceByPanel.get(id)
 
       logWsConnection('receiver', 'announce-panel', {
+        clientId: this.getClientId(),
         panelId: id,
         hasPersistence: Boolean(persistence),
       })
@@ -432,7 +474,10 @@ export class Sender extends WebSocketClient implements BaseSender {
 
   onConnectionOpened(): void {
     this.isPanelAttached = false
-    logWsConnection('sender', 'register-sender', { selectedPanelId: this.panelId })
+    logWsConnection('sender', 'register-sender', {
+      clientId: this.getClientId(),
+      selectedPanelId: this.panelId,
+    })
     this.sendWsMessage(new Messages.RegisterSender());
   }
 
@@ -449,6 +494,7 @@ export class Sender extends WebSocketClient implements BaseSender {
           this.isPanelAttached = true
           this.lastSeqByPath.clear()
           logWsConnection('sender', 'panel-attached', {
+            clientId: this.getClientId(),
             panelId: this.panelId,
             specName: (avMessage as AvControlsMessages.RootSpecification).name,
           })
@@ -480,8 +526,14 @@ export class Sender extends WebSocketClient implements BaseSender {
   }
 
   private listeners: ((message: AvControlsMessages.Message) => void)[] = []
-  addListener(listener: (message: AvControlsMessages.Message) => void): void {
+  addListener(listener: (message: AvControlsMessages.Message) => void): () => void {
     this.listeners.push(listener)
+    return () => {
+      const index = this.listeners.indexOf(listener)
+      if (index !== -1) {
+        this.listeners.splice(index, 1)
+      }
+    }
   }
 
   private broadcastAvMessage(message: AvControlsMessages.Message): void {
@@ -491,6 +543,7 @@ export class Sender extends WebSocketClient implements BaseSender {
   private async handlePanelList(panelIds: string[]): Promise<void> {
     this.senderOptions?.onPanelList?.([...panelIds])
     logWsConnection('sender', 'panel-list', {
+      clientId: this.getClientId(),
       panelIds,
       currentPanelId: this.panelId,
       isPanelAttached: this.isPanelAttached,
@@ -503,7 +556,10 @@ export class Sender extends WebSocketClient implements BaseSender {
 
     if (this.panelId && panelIds.includes(this.panelId)) {
       if (!this.isPanelAttached) {
-        logWsConnection('sender', 'reattach-panel', { panelId: this.panelId })
+        logWsConnection('sender', 'reattach-panel', {
+          clientId: this.getClientId(),
+          panelId: this.panelId,
+        })
         this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
       }
       return
@@ -513,14 +569,21 @@ export class Sender extends WebSocketClient implements BaseSender {
     if (!nextPanelId || !panelIds.includes(nextPanelId)) {
       Logger.warn('Ignoring invalid panel selection', { nextPanelId, panelIds })
       this.isPanelAttached = false
-      logWsConnection('sender', 'invalid-panel-selection', { nextPanelId, panelIds })
+      logWsConnection('sender', 'invalid-panel-selection', {
+        clientId: this.getClientId(),
+        nextPanelId,
+        panelIds,
+      })
       return
     }
 
     this.panelId = nextPanelId
     this.isPanelAttached = false
     this.lastSeqByPath.clear()
-    logWsConnection('sender', 'choose-panel', { panelId: this.panelId })
+    logWsConnection('sender', 'choose-panel', {
+      clientId: this.getClientId(),
+      panelId: this.panelId,
+    })
     this.sendWsMessage(new Messages.ChoosePanel(this.panelId))
   }
 }

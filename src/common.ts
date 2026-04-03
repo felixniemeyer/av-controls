@@ -17,6 +17,7 @@ import {
   Switch,
   Dots,
   Knob,
+  Lamp,
   Meter,
   PresetButton,
   Tabs,
@@ -110,10 +111,12 @@ export function createSenderFromSpec(spec: Controls.Base.Spec): Base.Sender {
       return new Joystick.Sender(spec as Joystick.Spec)
     } else if(spec.type === Modal.Spec.type) {
       return new Modal.Sender(spec as Modal.Spec)
-    } else if(spec.type === Menu.Spec.type) {
+  } else if(spec.type === Menu.Spec.type) {
       return new Menu.Sender(spec as Menu.Spec)
     } else if(spec.type === Meter.Spec.type) {
       return new Meter.Sender(spec as Meter.Spec)
+    } else if(spec.type === Lamp.Spec.type) {
+      return new Lamp.Sender(spec as Lamp.Spec)
     } else if(spec.type === Player3D.Spec.type) {
       return new Player3D.Sender(spec as Player3D.Spec)
     }

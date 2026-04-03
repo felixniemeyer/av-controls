@@ -12,5 +12,5 @@ export abstract class Sender {
   /**
    * Register a listener for incoming messages
    */
-  abstract addListener(listener: (message: Message) => void): void;
+  abstract addListener(listener: (message: Message) => void): () => void;
 }

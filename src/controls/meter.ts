@@ -1,5 +1,6 @@
 import { UpdateParsingError } from '../error';
 import * as Base from './base';
+import type { RangeMapping } from './range-mapping';
 
 export class Update extends Base.Update {
   constructor(
@@ -33,6 +34,7 @@ export class Spec extends Base.Spec {
     public min: number,
     public max: number,
     public initialState: State,
+    public mapping: RangeMapping = 'linear',
   ) {
     super(baseArgs);
   }

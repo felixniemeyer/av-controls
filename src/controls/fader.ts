@@ -1,5 +1,6 @@
 import * as Base from './base';
 import { UpdateParsingError } from '../error';
+import { mapNormToValue, mapValueToNorm, type RangeMapping } from './range-mapping';
 
 export class Signal extends Base.Signal {
   constructor(
@@ -35,7 +36,7 @@ export class Spec extends Base.Spec {
     public max: number,
     public decimalPlaces: number,
     public isHorizontal: boolean = false,
-    public mapping: 'linear' | 'square' = 'linear',
+    public mapping: RangeMapping = 'linear',
   ) {
     super(baseArgs);
   }
@@ -117,22 +118,4 @@ export class Sender extends Base.Sender {
   handleUpdate(update: Update) {
     this.value = update.value
   }
-}
-
-function mapNormToValue(normValue: number, min: number, max: number, mapping: 'linear' | 'square') {
-  const clamped = Math.max(0, Math.min(1, normValue))
-  if (mapping === 'square') {
-    return min + (clamped * clamped) * (max - min)
-  }
-  return min + clamped * (max - min)
-}
-
-function mapValueToNorm(value: number, min: number, max: number, mapping: 'linear' | 'square') {
-  const range = max - min
-  if (range === 0) return 0
-  const clamped = Math.max(0, Math.min(1, (value - min) / range))
-  if (mapping === 'square') {
-    return Math.sqrt(clamped)
-  }
-  return clamped
 }

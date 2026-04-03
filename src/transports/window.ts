@@ -128,8 +128,14 @@ export class Sender extends BaseSender {
   }
 
   private listeners: ((message: AvControlsMessages.Message) => void)[] = []
-  addListener(listener: (message: AvControlsMessages.Message) => void): void {
+  addListener(listener: (message: AvControlsMessages.Message) => void): () => void {
     this.listeners.push(listener)
+    return () => {
+      const index = this.listeners.indexOf(listener)
+      if (index !== -1) {
+        this.listeners.splice(index, 1)
+      }
+    }
   }
 
   private broadcastAvMessage(message: AvControlsMessages.Message): void {
