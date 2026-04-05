@@ -16,6 +16,7 @@ export type ArtworkRenderAck = {
   captured: boolean;
   ok: boolean;
   error?: string;
+  probeId?: string;
 };
 
 export class ArtworkClient {
@@ -46,6 +47,13 @@ export class ArtworkClient {
     }));
   }
 
+  probeRenderLatency(probeId: string) {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'probe-render-latency',
+      probeId,
+    }));
+  }
+
   private handleMessage(message: Message) {
     if (message.type === ArtworkRuntimeStatusMessage.type) {
       const status = message as ArtworkRuntimeStatusMessage;
@@ -62,6 +70,7 @@ export class ArtworkClient {
         captured: ack.captured,
         ok: ack.ok,
         error: ack.error,
+        probeId: ack.probeId,
       });
     }
   }

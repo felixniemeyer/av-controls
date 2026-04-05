@@ -52,7 +52,8 @@ export type ArtworkMode = 'live' | 'playing' | 'paused';
 
 export type ArtworkRuntimeCommand =
   | { type: 'set-artwork-mode'; mode: ArtworkMode }
-  | { type: 'render-artwork'; time: number; capture?: { downloadName?: string } };
+  | { type: 'render-artwork'; time: number; capture?: { downloadName?: string } }
+  | { type: 'probe-render-latency'; probeId: string };
 
 export class ArtworkRuntimeCommandMessage implements Message {
   static type = 'artwork-runtime-command' as const;
@@ -82,5 +83,6 @@ export class ArtworkRenderAckMessage implements Message {
     public captured: boolean,
     public ok: boolean,
     public error?: string,
+    public probeId?: string,
   ) {}
 }
