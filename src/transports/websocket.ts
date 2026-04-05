@@ -303,6 +303,10 @@ abstract class WebSocketClient {
       throw new CommunicationError(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  protected getSocketBufferedAmount(): number {
+    return this.ws?.bufferedAmount ?? 0;
+  }
   
   /**
    * Clean up resources
@@ -523,6 +527,10 @@ export class Sender extends WebSocketClient implements BaseSender {
     if(this.panelId && this.isPanelAttached) {
       this.sendWsMessage(new Messages.WrappedMessage(this.panelId, message));
     } 
+  }
+
+  getBufferedAmount(): number {
+    return this.getSocketBufferedAmount();
   }
 
   private listeners: ((message: AvControlsMessages.Message) => void)[] = []

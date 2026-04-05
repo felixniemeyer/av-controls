@@ -8,6 +8,10 @@ export abstract class Sender {
    * Send a message to the target
    */
   abstract send(message: Message): void;
+
+  getBufferedAmount(): number {
+    return 0;
+  }
   
   /**
    * Register a listener for incoming messages
