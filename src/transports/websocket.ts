@@ -13,6 +13,8 @@ import type { PersistenceOptions } from '../persistence'
 
 const websocketConnectionLog = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('ws-log') === '1';
+const websocketSignalLog = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('timeline-signal-log') === '1';
 
 let nextWebSocketClientId = 1;
 
@@ -85,6 +87,68 @@ function logWsConnection(role: 'sender' | 'receiver', event: string, data?: Reco
     : Date.now().toString();
   const isoTimestamp = new Date().toISOString();
   console.info(`[${isoTimestamp}] [ws:${role}] ${event} @${relativeTimestamp}ms`, data ?? {});
+}
+
+function logWsSignal(role: 'sender' | 'receiver', event: string, data?: Record<string, unknown>) {
+  if (!websocketSignalLog) {
+    return;
+  }
+  const relativeTimestamp = typeof performance !== 'undefined'
+    ? performance.now().toFixed(1)
+    : Date.now().toString();
+  const isoTimestamp = new Date().toISOString();
+  console.info(`[${isoTimestamp}] [ws:${role}:signal] ${event} @${relativeTimestamp}ms`, data ?? {});
+}
+
+function logIgnoredUpdateOnlySignal(role: 'sender' | 'receiver') {
+  if (!websocketSignalLog) {
+    return;
+  }
+  console.info(`[ws:${role}:signal] update-only control received`);
+}
+
+function extractNestedControlUpdatePath(update: any): string[] {
+  const path: string[] = [];
+  let current = update;
+  while (current && typeof current === 'object' && 'controlId' in current && 'update' in current) {
+    path.push(String(current.controlId));
+    current = current.update;
+  }
+  return path;
+}
+
+function shouldIgnoreSignalLogMessage(message: AvControlsMessages.Message): boolean {
+  if (message.type !== AvControlsMessages.ControlUpdate.type) {
+    return false;
+  }
+  const updateMessage = message as AvControlsMessages.ControlUpdate;
+  const path = extractNestedControlUpdatePath(updateMessage.update);
+  const leafId = path[path.length - 1];
+  return leafId === 'audioMeter' || leafId === 'phaseCake' || leafId === 'lamp';
+}
+
+function dispatchSignalBatchToReceiver(
+  receiver: Base.Receiver,
+  nodes: AvControlsMessages.ControlSignalBatchNode[],
+) {
+  const controls = 'controls' in receiver && receiver.controls && typeof receiver.controls === 'object'
+    ? receiver.controls as Record<string, Base.Receiver | undefined>
+    : null;
+  if (!controls) {
+    return;
+  }
+  for (const node of nodes) {
+    const child = controls[node.controlId];
+    if (!child) {
+      continue;
+    }
+    if (node.signal !== undefined) {
+      child.handleSignal(node.signal);
+    }
+    if (node.children?.length) {
+      dispatchSignalBatchToReceiver(child, node.children);
+    }
+  }
 }
 
 /**
@@ -430,6 +494,15 @@ export class Receiver extends WebSocketClient {
               })
             }
             break;
+          case AvControlsMessages.ControlSignalBatch.type:
+            const batchMessage = wsMessage.message as AvControlsMessages.ControlSignalBatch
+            const batchReceiver = this.rootReceivers[wsMessage.panelId]
+            if (batchReceiver) {
+              Base.Receiver.withUpdateOrigin(batchMessage.origin ?? { kind: 'controller' }, () => {
+                dispatchSignalBatchToReceiver(batchReceiver, batchMessage.signals)
+              })
+            }
+            break;
           case AvControlsMessages.ArtworkRuntimeCommandMessage.type:
             this.artworkRuntimeHandlers?.[wsMessage.panelId]?.handleMessage(
               wsMessage.message as AvControlsMessages.ArtworkRuntimeCommandMessage,
@@ -505,6 +578,16 @@ export class Sender extends WebSocketClient implements BaseSender {
         }
         if (avMessage.type === AvControlsMessages.ControlUpdate.type) {
           const updateMsg = avMessage as AvControlsMessages.ControlUpdate
+          if (shouldIgnoreSignalLogMessage(updateMsg)) {
+            logIgnoredUpdateOnlySignal('sender')
+          } else {
+            logWsSignal('sender', 'recv-control-update', {
+              panelId: wrapped.panelId,
+              origin: updateMsg.origin,
+              seq: updateMsg.seq,
+              update: updateMsg.update,
+            })
+          }
           const seq = updateMsg.seq
           if (typeof seq === 'number') {
             const path = extractUpdatePath(updateMsg.update)
@@ -525,6 +608,26 @@ export class Sender extends WebSocketClient implements BaseSender {
    */
   send(message: AvControlsMessages.Message): void {
     if(this.panelId && this.isPanelAttached) {
+      if (message.type === AvControlsMessages.ControlSignal.type) {
+        const signalMessage = message as AvControlsMessages.ControlSignal
+        logWsSignal('sender', 'send-control-signal', {
+          panelId: this.panelId,
+          origin: signalMessage.origin,
+          seq: signalMessage.seq,
+          signal: signalMessage.signal,
+          bufferedAmount: this.getSocketBufferedAmount(),
+        })
+      }
+      if (message.type === AvControlsMessages.ControlSignalBatch.type) {
+        const batchMessage = message as AvControlsMessages.ControlSignalBatch
+        logWsSignal('sender', 'send-control-signal-batch', {
+          panelId: this.panelId,
+          origin: batchMessage.origin,
+          seq: batchMessage.seq,
+          signalCount: batchMessage.signals.length,
+          bufferedAmount: this.getSocketBufferedAmount(),
+        })
+      }
       this.sendWsMessage(new Messages.WrappedMessage(this.panelId, message));
     } 
   }

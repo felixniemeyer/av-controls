@@ -36,6 +36,23 @@ export class ControlSignal implements Message {
   ) {}
 }
 
+export type ControlSignalBatchNode = {
+  controlId: string;
+  signal?: Base.Signal;
+  children?: ControlSignalBatchNode[];
+};
+
+export class ControlSignalBatch implements Message {
+  static type = 'control-signal-batch' as const;
+  type = ControlSignalBatch.type;
+
+  constructor(
+    public signals: ControlSignalBatchNode[],
+    public seq?: number,
+    public origin?: UpdateOrigin,
+  ) {}
+}
+
 // updates go from the visuals to the controller
 export class ControlUpdate implements Message {
   static type = 'control-update' as const;

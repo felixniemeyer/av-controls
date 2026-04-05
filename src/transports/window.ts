@@ -21,6 +21,30 @@ namespace Messages {
   }
 }
 
+function dispatchSignalBatchToReceiver(
+  receiver: Base.Receiver,
+  nodes: AvControlsMessages.ControlSignalBatchNode[],
+) {
+  const controls = 'controls' in receiver && receiver.controls && typeof receiver.controls === 'object'
+    ? receiver.controls as Record<string, Base.Receiver | undefined>
+    : null;
+  if (!controls) {
+    return;
+  }
+  for (const node of nodes) {
+    const child = controls[node.controlId];
+    if (!child) {
+      continue;
+    }
+    if (node.signal !== undefined) {
+      child.handleSignal(node.signal);
+    }
+    if (node.children?.length) {
+      dispatchSignalBatchToReceiver(child, node.children);
+    }
+  }
+}
+
 /**
  * Main receiver class for handling control communication
  */
@@ -83,6 +107,11 @@ export class Receiver {
       if(data.message.type === AvControlsMessages.ControlSignal.type) {
         Base.Receiver.withUpdateOrigin({ kind: 'controller' }, () => {
           this.rootReceiver.handleSignal((data.message as AvControlsMessages.ControlSignal).signal)
+        })
+      }
+      if(data.message.type === AvControlsMessages.ControlSignalBatch.type) {
+        Base.Receiver.withUpdateOrigin((data.message as AvControlsMessages.ControlSignalBatch).origin ?? { kind: 'controller' }, () => {
+          dispatchSignalBatchToReceiver(this.rootReceiver, (data.message as AvControlsMessages.ControlSignalBatch).signals)
         })
       }
     }
