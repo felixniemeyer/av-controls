@@ -1,5 +1,4 @@
 import * as Base from './controls/base'
-import * as Group from './controls/group'
 
 const DB_NAME = 'av-controls'
 const STORE_NAME = 'control-state'
