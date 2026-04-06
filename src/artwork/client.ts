@@ -1,4 +1,5 @@
 import {
+  ArtworkCaptureAckMessage,
   ArtworkRenderAckMessage,
   ArtworkRuntimeCommandMessage,
   ArtworkRuntimeStatusMessage,
@@ -19,9 +20,16 @@ export type ArtworkRenderAck = {
   probeId?: string;
 };
 
+export type ArtworkCaptureAck = {
+  action: 'start-video' | 'finalize-video' | 'cancel-video';
+  ok: boolean;
+  error?: string;
+};
+
 export class ArtworkClient {
   public onStatus: ((status: ArtworkClientStatus) => void) | null = null;
   public onRenderAck: ((ack: ArtworkRenderAck) => void) | null = null;
+  public onCaptureAck: ((ack: ArtworkCaptureAck) => void) | null = null;
   private removeListener: (() => void) | null = null;
 
   constructor(
@@ -42,6 +50,25 @@ export class ArtworkClient {
   resetRenderState() {
     this.sender.send(new ArtworkRuntimeCommandMessage({
       type: 'reset-render-state',
+    }));
+  }
+
+  startVideoCapture(options: { downloadName: string; fps: number; codec: 'avc' | 'hevc'; quality: number }) {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'start-video-capture',
+      ...options,
+    }));
+  }
+
+  finalizeVideoCapture() {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'finalize-video-capture',
+    }));
+  }
+
+  cancelVideoCapture() {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'cancel-video-capture',
     }));
   }
 
@@ -78,6 +105,15 @@ export class ArtworkClient {
         error: ack.error,
         probeId: ack.probeId,
       });
+      return;
+    }
+    if (message.type === ArtworkCaptureAckMessage.type) {
+      const ack = message as ArtworkCaptureAckMessage;
+      this.onCaptureAck?.({
+        action: ack.action,
+        ok: ack.ok,
+        error: ack.error,
+      });
     }
   }
 
@@ -86,5 +122,6 @@ export class ArtworkClient {
     this.removeListener = null;
     this.onStatus = null;
     this.onRenderAck = null;
+    this.onCaptureAck = null;
   }
 }
