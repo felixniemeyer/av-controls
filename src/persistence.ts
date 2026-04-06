@@ -23,10 +23,18 @@ export function extractUpdateInfo(update: Base.Update): { path: string[], state:
   const path: string[] = []
   let current: Base.Update = update
 
-  // Walk through nested Group.Update to build path
-  while (current instanceof Group.Update) {
-    path.push(current.controlId)
-    current = current.update
+  // Walk through nested container updates (Group, Modal, Tabs, etc.) to build path.
+  // We intentionally detect by shape instead of concrete class so any container update
+  // that forwards `{ controlId, update }` participates in persistence path extraction.
+  while (
+    typeof current === 'object'
+    && current !== null
+    && 'controlId' in (current as object)
+    && 'update' in (current as object)
+  ) {
+    const nested = current as Base.Update & { controlId: string; update: Base.Update }
+    path.push(nested.controlId)
+    current = nested.update
   }
 
   // Convert the leaf update to a state-like object
