@@ -69,6 +69,7 @@ export type ArtworkMode = 'live' | 'playing' | 'paused';
 
 export type ArtworkRuntimeCommand =
   | { type: 'set-artwork-mode'; mode: ArtworkMode }
+  | { type: 'reset-render-state' }
   | { type: 'render-artwork'; time: number; capture?: { downloadName?: string } }
   | { type: 'probe-render-latency'; probeId: string };
 

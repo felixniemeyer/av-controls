@@ -39,6 +39,12 @@ export class ArtworkClient {
     }));
   }
 
+  resetRenderState() {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'reset-render-state',
+    }));
+  }
+
   render(time: number, options?: { captureDownloadName?: string }) {
     this.sender.send(new ArtworkRuntimeCommandMessage({
       type: 'render-artwork',
