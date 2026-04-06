@@ -70,9 +70,12 @@ export type ArtworkMode = 'live' | 'playing' | 'paused';
 export type ArtworkRuntimeCommand =
   | { type: 'set-artwork-mode'; mode: ArtworkMode }
   | { type: 'reset-render-state' }
+  | { type: 'configure-image-capture'; workerCount: number }
   | { type: 'start-video-capture'; downloadName: string; fps: number; codec: 'avc' | 'hevc'; quality: number }
   | { type: 'finalize-video-capture' }
   | { type: 'cancel-video-capture' }
+  | { type: 'flush-image-capture' }
+  | { type: 'cancel-image-capture' }
   | { type: 'render-artwork'; time: number; capture?: { downloadName?: string } }
   | { type: 'probe-render-latency'; probeId: string };
 
@@ -113,7 +116,7 @@ export class ArtworkCaptureAckMessage implements Message {
   type = ArtworkCaptureAckMessage.type;
 
   constructor(
-    public action: 'start-video' | 'finalize-video' | 'cancel-video',
+    public action: 'start-video' | 'finalize-video' | 'cancel-video' | 'flush-images' | 'cancel-images',
     public ok: boolean,
     public error?: string,
   ) {}

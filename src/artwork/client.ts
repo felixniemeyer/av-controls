@@ -21,7 +21,7 @@ export type ArtworkRenderAck = {
 };
 
 export type ArtworkCaptureAck = {
-  action: 'start-video' | 'finalize-video' | 'cancel-video';
+  action: 'start-video' | 'finalize-video' | 'cancel-video' | 'flush-images' | 'cancel-images';
   ok: boolean;
   error?: string;
 };
@@ -53,6 +53,13 @@ export class ArtworkClient {
     }));
   }
 
+  configureImageCapture(options: { workerCount: number }) {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'configure-image-capture',
+      ...options,
+    }));
+  }
+
   startVideoCapture(options: { downloadName: string; fps: number; codec: 'avc' | 'hevc'; quality: number }) {
     this.sender.send(new ArtworkRuntimeCommandMessage({
       type: 'start-video-capture',
@@ -69,6 +76,18 @@ export class ArtworkClient {
   cancelVideoCapture() {
     this.sender.send(new ArtworkRuntimeCommandMessage({
       type: 'cancel-video-capture',
+    }));
+  }
+
+  flushImageCapture() {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'flush-image-capture',
+    }));
+  }
+
+  cancelImageCapture() {
+    this.sender.send(new ArtworkRuntimeCommandMessage({
+      type: 'cancel-image-capture',
     }));
   }
 
