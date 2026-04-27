@@ -24,17 +24,8 @@ function cloneVec3(value: Vec3): Vec3 {
   return [value[0], value[1], value[2]]
 }
 
-function normalizeQuaternion(rotation: Quaternion): Quaternion {
-  const length = Math.hypot(rotation[0], rotation[1], rotation[2], rotation[3])
-  if (length <= 1e-8) {
-    return [0, 0, 0, 1]
-  }
-  return [
-    rotation[0] / length,
-    rotation[1] / length,
-    rotation[2] / length,
-    rotation[3] / length,
-  ]
+function cloneQuaternion(value: Quaternion): Quaternion {
+  return [value[0], value[1], value[2], value[3]]
 }
 
 export class Signal extends Base.Signal {
@@ -52,7 +43,7 @@ export class Signal extends Base.Signal {
     if (!isQuaternion(payload?.rotation)) {
       throw new UpdateParsingError(`rotation must be a 4-number tuple, got ${payload?.rotation}`)
     }
-    return new Signal(cloneVec3(payload.position), normalizeQuaternion(payload.rotation))
+    return new Signal(cloneVec3(payload.position), cloneQuaternion(payload.rotation))
   }
 }
 
@@ -99,12 +90,12 @@ export class Receiver extends Base.Receiver {
   ) {
     super();
     this.position = cloneVec3(spec.initialState.position)
-    this.rotation = normalizeQuaternion(spec.initialState.rotation)
+    this.rotation = cloneQuaternion(spec.initialState.rotation)
   }
 
   handleSignal(payload: Signal): void {
     this.position = cloneVec3(payload.position)
-    this.rotation = normalizeQuaternion(payload.rotation)
+    this.rotation = cloneQuaternion(payload.rotation)
     this.onChange?.(cloneVec3(this.position), [...this.rotation] as Quaternion)
     this.onUpdate(new Update(cloneVec3(this.position), [...this.rotation] as Quaternion))
   }
@@ -115,7 +106,7 @@ export class Receiver extends Base.Receiver {
 
   restoreState(state: State): void {
     this.position = cloneVec3(state.position)
-    this.rotation = normalizeQuaternion(state.rotation)
+    this.rotation = cloneQuaternion(state.rotation)
     this.onChange?.(cloneVec3(this.position), [...this.rotation] as Quaternion)
   }
 }
@@ -129,12 +120,12 @@ export class Sender extends Base.Sender {
   ) {
     super()
     this.position = cloneVec3(spec.initialState.position)
-    this.rotation = normalizeQuaternion(spec.initialState.rotation)
+    this.rotation = cloneQuaternion(spec.initialState.rotation)
   }
 
   setPose(position: Vec3, rotation: Quaternion) {
     this.position = cloneVec3(position)
-    this.rotation = normalizeQuaternion(rotation)
+    this.rotation = cloneQuaternion(rotation)
     this.onSignal(new Signal(cloneVec3(this.position), [...this.rotation] as Quaternion))
   }
 
@@ -148,6 +139,6 @@ export class Sender extends Base.Sender {
 
   handleUpdate(update: Update) {
     this.position = cloneVec3(update.position)
-    this.rotation = normalizeQuaternion(update.rotation)
+    this.rotation = cloneQuaternion(update.rotation)
   }
 }
